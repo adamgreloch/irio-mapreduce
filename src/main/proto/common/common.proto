@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package common;
+
+option java_package = "pl.edu.mimuw.mapreduce.common";
+option java_multiple_files = true;
+
+message Map {
+  int64 id = 1;
+}
+message Reduce {
+  int64 id = 1;
+}
+
+message Batch {
+  repeated Map maps = 1;
+  repeated Reduce reduces = 2;
+  uint64 input_id = 3;
+}
+
+message Task {
+  uint64 task_id = 1;
+  oneof task {
+    Map map = 2;
+    Reduce reduce = 3;
+  };
+}

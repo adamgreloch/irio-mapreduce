@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package healthcheck;
+
+option java_package = "pl.edu.mimuw.mapreduce.healthcheck";
+option java_multiple_files = true;
+
+message Ping {
+  uint64 node_id = 1;
+  uint64 check_id = 2;
+}
+
+message PingResponse {
+  uint64 node_id = 1;
+  uint64 check_id = 2;
+  uint32 code = 3;
+}
