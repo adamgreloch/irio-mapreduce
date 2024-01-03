@@ -13,5 +13,5 @@ message Ping {
 message PingResponse {
   uint64 node_id = 1;
   uint64 check_id = 2;
-  uint32 code = 3;
+  uint32 status_code = 3;
 }

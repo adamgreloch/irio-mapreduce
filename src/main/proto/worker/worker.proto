@@ -9,7 +9,7 @@ import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service Worker {
-  rpc DoTask(Request) returns (Response) {}
+  rpc DoWork(Request) returns (Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
 }
 

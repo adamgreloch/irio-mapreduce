@@ -1,20 +1,21 @@
-package pl.edu.mimuw.mapreduce.worker;
+package pl.edu.mimuw.mapreduce.taskmanager;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.Task;
 import pl.edu.mimuw.mapreduce.healthcheck.Ping;
 import pl.edu.mimuw.mapreduce.healthcheck.PingResponse;
 
 import java.io.IOException;
 
-public class Worker {
+public class TaskManager {
     public static void main(String[] args) throws IOException, InterruptedException {
-        Utils.start_service(new WorkerImpl(), 50042);
+        Utils.start_service(new TaskManagerImpl(), 50044);
     }
 
-    static class WorkerImpl extends WorkerGrpc.WorkerImplBase {
+    static class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         @Override
-        public void doWork(Request request, StreamObserver<Response> responseObserver) {
+        public void doTask(Task request, StreamObserver<TaskManagerDone> responseObserver) {
             throw new RuntimeException("todo");
         }
 

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package batchmanager;
+
+option java_package = "pl.edu.mimuw.mapreduce.batchmanager";
+option java_multiple_files = true;
+
+import "common/common.proto";
+import "healthcheck/healthcheck.proto";
+
+service BatchManager {
+  rpc DoBatch(common.Batch) returns (BatchManagerDone) {}
+  rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
+}
+
+message BatchManagerDone {
+  uint64 batch_id = 1;
+}

@@ -1,20 +1,21 @@
-package pl.edu.mimuw.mapreduce.worker;
+package pl.edu.mimuw.mapreduce.master;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.Batch;
 import pl.edu.mimuw.mapreduce.healthcheck.Ping;
 import pl.edu.mimuw.mapreduce.healthcheck.PingResponse;
 
 import java.io.IOException;
 
-public class Worker {
+public class Master {
     public static void main(String[] args) throws IOException, InterruptedException {
-        Utils.start_service(new WorkerImpl(), 50042);
+        Utils.start_service(new MasterImpl(), 50040);
     }
 
-    static class WorkerImpl extends WorkerGrpc.WorkerImplBase {
+    static class MasterImpl extends MasterGrpc.MasterImplBase {
         @Override
-        public void doWork(Request request, StreamObserver<Response> responseObserver) {
+        public void submitBatch(Batch request, StreamObserver<BatchDone> responseObserver) {
             throw new RuntimeException("todo");
         }
 
