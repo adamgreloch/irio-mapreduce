@@ -1,19 +1,25 @@
 package pl.edu.mimuw.mapreduce.batchmanager;
 
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import io.grpc.ManagedChannel;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BatchManager {
@@ -23,14 +29,95 @@ public class BatchManager {
     }
 
     static class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
-        private AtomicInteger taskNr = new AtomicInteger(1);
-        private Map<Integer, Batch> currentBatches = new ConcurrentHashMap<>();
-        private Map<Integer, Integer> doneTasks = new ConcurrentHashMap<>();
-        private Map<Integer, Boolean> finishedMapping = new ConcurrentHashMap<>();
+        private final AtomicInteger taskCount = new AtomicInteger(1);
+        private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
+        private final Map<Batch, Boolean> finishedMapping = new ConcurrentHashMap<>();
+        private StatusCode statusCode = StatusCode.Ok;
+
+        //Zwracamy kolejnego taska do zrobienia w danym batchu, jeśli jakiś istnieje.
+        private Optional<Task> getTask(Batch batch) {
+            var builder = Task.newBuilder();
+            builder.setTaskId(taskCount.getAndIncrement());
+
+            int nextTaskNr = doneTasks.get(batch);
+
+            if (!finishedMapping.get(batch)) { // we now Map
+                if (nextTaskNr >= batch.getReduceBinIdsCount()) {
+                    return Optional.empty();
+                }
+                builder.setBinId(batch.getReduceBinIds(nextTaskNr))
+                        .setTaskType(Task.TaskType.Reduce);
+                return Optional.of(builder.build());
+            }
+
+            // we now Reduce
+            if (nextTaskNr >= batch.getMapBinIdsCount()) {
+                return Optional.empty();
+            }
+            builder.setBinId(batch.getMapBinIds(nextTaskNr))
+                    .setTaskType(Task.TaskType.Map);
+            return Optional.of(builder.build());
+        }
+
+        private FutureCallback<Response> createCallback(Batch batch,
+                                                        StreamObserver<Response> responseObserver,
+                                                        TaskManagerGrpc.TaskManagerFutureStub taskManagerFutureStub) {
+            return new FutureCallback<>() {
+                @Override
+                public void onSuccess(Response result) {
+                    if (result.getStatusCode() != StatusCode.Ok) {
+                        statusCode = result.getStatusCode();
+                        return;
+                    }
+
+                    int doneTaskNr = doneTasks.get(batch);
+                    doneTaskNr++;
+
+                    if (batch.getMapBinIdsCount() <= doneTaskNr) {
+                        doneTasks.put(batch, 0);
+                        finishedMapping.put(batch, true);
+                    } else {
+                        doneTasks.put(batch, doneTaskNr);
+                    }
+
+                    Optional<Task> optional = getTask(batch);
+                    if (optional.isEmpty()) {
+                        responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.Ok).build());
+                        responseObserver.onCompleted();
+                        return;
+                    }
+
+                    ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
+                    Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), null);
+                }
+
+                @Override
+                public void onFailure(Throwable t) {
+                    statusCode = StatusCode.Err;
+                }
+            };
+        }
 
         @Override
-        public void doBatch(Batch request, StreamObserver<Response> responseObserver) {
-            throw new RuntimeException("todo");
+        public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+            ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137).usePlaintext().build(); // TODO set this properly
+            var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
+
+            doneTasks.put(batch, 0);
+            finishedMapping.put(batch, false);
+
+
+            Optional<Task> optionalTask = getTask(batch);
+            if (optionalTask.isEmpty()) {
+                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.EMPTY_MAP_AND_REDUCE).build());
+                responseObserver.onCompleted();
+                return;
+            }
+
+            ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optionalTask.get());
+
+            Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), null);
+            //TODO add executioner instead of null;
         }
 
         @Override
