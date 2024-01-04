@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import pl.edu.mimuw.mapreduce.common.Split;
+
 import java.io.File;
 
 import java.util.ArrayList;
@@ -49,11 +51,11 @@ public class LocalStorage {
 
     public Iterator<FileRep> get_split_iterator(Split split) {
         return new Iterator<FileRep>() {
-            private int current = findIndexOfId(split.getSplitBegin());
+            private int current = findIndexOfId(split.getBeg());
 
             @Override
             public boolean hasNext() {
-                return current < split.getSplitSize();
+                return current < split.getEnd();
             }
 
             @Override

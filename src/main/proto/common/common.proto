@@ -25,3 +25,9 @@ message Task {
     Reduce reduce = 3;
   };
 }
+
+message Split {
+  uint64 beg = 1;
+  uint64 end = 2;
+  uint64 split_id = 3;
+}

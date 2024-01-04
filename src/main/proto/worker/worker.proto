@@ -13,20 +13,14 @@ service Worker {
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
 }
 
-message Split {
-  uint64 beg = 1;
-  uint64 end = 2;
-  uint64 split_id = 3;
-}
-
 message Request {
   uint64 batch_id = 1;
   common.Task task = 2;
-  Split split = 3;
+  common.Split split = 3;
 }
 
 message Response {
   uint64 batch_id = 1;
-  Split split = 2;
+  common.Split split = 2;
   uint32 code = 3;
 }
