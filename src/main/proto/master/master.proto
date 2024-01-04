@@ -2,18 +2,13 @@ syntax = "proto3";
 
 package master;
 
-option java_package = "pl.edu.mimuw.mapreduce.master";
+option java_package = "pl.edu.mimuw.proto.master";
 option java_multiple_files = true;
 
 import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service Master {
-  rpc SubmitBatch(common.Batch) returns (BatchDone) {}
+  rpc SubmitBatch(common.Batch) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
-}
-
-message BatchDone {
-  uint64 batch_id = 1;
-  uint64 output_id = 2;
 }

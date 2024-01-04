@@ -2,9 +2,11 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
-import pl.edu.mimuw.mapreduce.common.Task;
-import pl.edu.mimuw.mapreduce.healthcheck.Ping;
-import pl.edu.mimuw.mapreduce.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.healthcheck.Ping;
+import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
 
@@ -15,7 +17,7 @@ public class TaskManager {
 
     static class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         @Override
-        public void doTask(Task request, StreamObserver<TaskManagerDone> responseObserver) {
+        public void doTask(Task request, StreamObserver<Response> responseObserver) {
             throw new RuntimeException("todo");
         }
 

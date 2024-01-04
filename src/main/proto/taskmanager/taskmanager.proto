@@ -2,18 +2,13 @@ syntax = "proto3";
 
 package taskmanager;
 
-option java_package = "pl.edu.mimuw.mapreduce.taskmanager";
+option java_package = "pl.edu.mimuw.proto.taskmanager";
 option java_multiple_files = true;
 
 import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service TaskManager {
-  rpc DoTask(common.Task) returns (TaskManagerDone) {}
+  rpc DoTask(common.Task) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
-}
-
-message TaskManagerDone {
-  uint64 batch_id = 1;
-  uint64 task_id = 2;
 }
