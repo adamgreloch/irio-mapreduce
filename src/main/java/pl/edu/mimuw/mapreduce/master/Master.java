@@ -2,9 +2,11 @@ package pl.edu.mimuw.mapreduce.master;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
-import pl.edu.mimuw.mapreduce.common.Batch;
-import pl.edu.mimuw.mapreduce.healthcheck.Ping;
-import pl.edu.mimuw.mapreduce.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.common.Batch;
+import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.healthcheck.Ping;
+import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.master.MasterGrpc;
 
 import java.io.IOException;
 
@@ -15,7 +17,7 @@ public class Master {
 
     static class MasterImpl extends MasterGrpc.MasterImplBase {
         @Override
-        public void submitBatch(Batch request, StreamObserver<BatchDone> responseObserver) {
+        public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
             throw new RuntimeException("todo");
         }
 

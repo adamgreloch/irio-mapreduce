@@ -2,14 +2,14 @@ syntax = "proto3";
 
 package worker;
 
-option java_package = "pl.edu.mimuw.mapreduce.worker";
+option java_package = "pl.edu.mimuw.proto.worker";
 option java_multiple_files = true;
 
 import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service Worker {
-  rpc DoWork(Request) returns (Response) {}
+  rpc DoWork(Request) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
 }
 
@@ -17,10 +17,4 @@ message Request {
   uint64 batch_id = 1;
   common.Task task = 2;
   common.Split split = 3;
-}
-
-message Response {
-  uint64 batch_id = 1;
-  common.Split split = 2;
-  uint32 code = 3;
 }

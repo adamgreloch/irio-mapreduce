@@ -1,9 +1,8 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
-import pl.edu.mimuw.mapreduce.common.Split;
+import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
-
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;

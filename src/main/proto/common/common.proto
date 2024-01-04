@@ -2,32 +2,43 @@ syntax = "proto3";
 
 package common;
 
-option java_package = "pl.edu.mimuw.mapreduce.common";
+option java_package = "pl.edu.mimuw.proto.common";
 option java_multiple_files = true;
 
-message Map {
-  int64 id = 1;
-}
-message Reduce {
-  int64 id = 1;
-}
+/* All map/reduce binaries are available from a shared stable storage
+ * and are identifiable by their "binary IDs".
+ *
+ * The range of data that the batch will be applied to is also accessible
+ * via shared stable storage and is identifiable by its "input ID". */
 
 message Batch {
-  repeated Map maps = 1;
-  repeated Reduce reduces = 2;
-  uint64 input_id = 3;
+  repeated int64 map_bin_ids = 1; // binary IDs of map tasks
+  repeated int64 reduce_bin_ids = 2; // binary IDs of reduce tasks
+  uint64 input_id = 3; // ID of range of data to batch-process
 }
 
 message Task {
-  uint64 task_id = 1;
-  oneof task {
-    Map map = 2;
-    Reduce reduce = 3;
-  };
+  enum TaskType {
+    Map = 0;
+    Reduce = 1;
+  }
+  uint64 task_id = 1; // ID of a map/reduce task assigned by task manager
+  TaskType task_type = 2;
+  int64 bin_id = 3; // binary ID of the task
 }
 
 message Split {
   uint64 beg = 1;
   uint64 end = 2;
   uint64 split_id = 3;
+}
+
+enum StatusCode {
+  Ok = 0;
+  Err = 1;
+}
+
+/* Service responds with a Response message after processing the request */
+message Response {
+  StatusCode status_code = 1;
 }
