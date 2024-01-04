@@ -12,6 +12,7 @@ import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
@@ -20,6 +21,9 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BatchManager {
@@ -32,6 +36,7 @@ public class BatchManager {
         private final AtomicInteger taskCount = new AtomicInteger(1);
         private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
         private final Map<Batch, Boolean> finishedMapping = new ConcurrentHashMap<>();
+        private final ExecutorService executorService = Executors.newFixedThreadPool(10);
         private StatusCode statusCode = StatusCode.Ok;
 
         //Zwracamy kolejnego taska do zrobienia w danym batchu, jeśli jakiś istnieje.
@@ -88,7 +93,7 @@ public class BatchManager {
                     }
 
                     ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
-                    Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), null);
+                    Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), executorService);
                 }
 
                 @Override
@@ -100,7 +105,8 @@ public class BatchManager {
 
         @Override
         public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
-            ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137).usePlaintext().build(); // TODO set this properly
+            ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137)
+                    .executor(executorService).usePlaintext().build(); // TODO ustawić to dobrze.
             var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
             doneTasks.put(batch, 0);
@@ -116,13 +122,18 @@ public class BatchManager {
 
             ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optionalTask.get());
 
-            Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), null);
-            //TODO add executioner instead of null;
+            Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), executorService);
+            // onNext i onCompleted jest wołane w createCallback.
         }
 
         @Override
         public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-            throw new RuntimeException("todo");
+            PingResponse pingResponse = PingResponse.newBuilder()
+                    .setStatusCode(statusCode == StatusCode.Ok ? HealthStatusCode.Healthy : HealthStatusCode.Error)
+                    .build(); // Warto by było się zastanowić jak z tymi kodami
+
+            responseObserver.onNext(pingResponse);
+            responseObserver.onCompleted();
         }
     }
 }
