@@ -42,3 +42,5 @@ enum StatusCode {
 message Response {
   StatusCode status_code = 1;
 }
+
+// TODO: add testing API (for breaking links, processes etc.)
