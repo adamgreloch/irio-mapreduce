@@ -1,33 +1,33 @@
 package pl.edu.mimuw.mapreduce.worker;
 
-import pl.edu.mimuw.mapreduce.storage.local.FileRep;
-import pl.edu.mimuw.mapreduce.storage.local.LocalStorage;
+import pl.edu.mimuw.mapreduce.storage.FileRep;
+import pl.edu.mimuw.mapreduce.storage.Storage;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 
 public class Processor implements AutoCloseable {
-    private final long destination_id;
+    private final long destinationId;
     private final File binary;
-    private final String tempdir;
-    private final LocalStorage storage;
+    private final String tempDir;
+    private final Storage storage;
 
-    public Processor(LocalStorage storage, long bin_id, long destination_id) throws IOException {
+    public Processor(Storage storage, long binId, long destinationId) throws IOException {
         this.storage = storage;
-        this.binary = storage.get(bin_id).getFile();
-        this.destination_id = destination_id;
-        this.tempdir = Files.createTempDirectory("processor").toFile().getAbsolutePath();
+        this.binary = storage.get_binary(binId);
+        this.destinationId = destinationId;
+        this.tempDir = Files.createTempDirectory("processor").toFile().getAbsolutePath();
     }
 
     public void process_file(FileRep fr) throws IOException, InterruptedException {
         var pb = new ProcessBuilder();
-        pb.redirectInput(fr.getFile());
-        var outputFile = new File(tempdir, String.valueOf(fr.getId()));
+        pb.redirectInput(fr.file());
+        var outputFile = new File(tempDir, String.valueOf(fr.id()));
         pb.redirectOutput(outputFile);
         pb.command(binary.getAbsolutePath());
         pb.start().waitFor();
-        storage.put(outputFile);
+        storage.put_file(destinationId, outputFile);
         Files.delete(outputFile.toPath().toAbsolutePath()); // are toAbsolutePath() transforms necessary?
     }
 

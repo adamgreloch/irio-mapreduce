@@ -10,7 +10,7 @@ import java.util.List;
 
 
 public class LocalStorage {
-    private final List<FileRep> fileList;
+    private final List<LocalFileRep> fileList;
     private final long largestId;
 
     public LocalStorage() {
@@ -18,38 +18,38 @@ public class LocalStorage {
         largestId = 0;
     }
 
-    public FileRep get(long id) {
-        for (FileRep fileRep : fileList) {
-            if (fileRep.getId() == id) {
-                return fileRep;
+    public LocalFileRep get(long id) {
+        for (LocalFileRep localFileRep : fileList) {
+            if (localFileRep.id() == id) {
+                return localFileRep;
             }
         }
         return null;
     }
 
     public void put(File file) {
-        FileRep fileRep = new FileRep(file, largestId + 1);
+        LocalFileRep localFileRep = new LocalFileRep(file, largestId + 1);
         if (file == null) {
             throw new IllegalArgumentException("File cannot be null");
         }
         if (largestId == Long.MAX_VALUE) {
             throw new IllegalStateException("Cannot add more files");
         }
-        fileList.add(fileRep);
-        fileList.sort((a, b) -> (int) (a.getId() - b.getId()));
+        fileList.add(localFileRep);
+        fileList.sort((a, b) -> (int) (a.id() - b.id()));
     }
 
-    public int findIndexOfId(long id) {
+    private int findIndexOfId(long id) {
         for (int i = 0; i < fileList.size(); i++) {
-            if (fileList.get(i).getId() == id) {
+            if (fileList.get(i).id() == id) {
                 return i;
             }
         }
         return -1;
     }
 
-    public Iterator<FileRep> get_split_iterator(Split split) {
-        return new Iterator<FileRep>() {
+    public Iterator<LocalFileRep> get_split_iterator(Split split) {
+        return new Iterator<LocalFileRep>() {
             private int current = findIndexOfId(split.getBeg());
 
             @Override
@@ -58,7 +58,7 @@ public class LocalStorage {
             }
 
             @Override
-            public FileRep next() {
+            public LocalFileRep next() {
                 return fileList.get(current++);
             }
         };
@@ -70,9 +70,9 @@ public class LocalStorage {
         storage.put(new File("file1"));
         storage.put(new File("file2"));
         storage.put(new File("file3"));
-        System.out.println(storage.get(1).getFile().getName());
-        System.out.println(storage.get(2).getFile().getName());
-        System.out.println(storage.get(3).getFile().getName());
+        System.out.println(storage.get(1).file().getName());
+        System.out.println(storage.get(2).file().getName());
+        System.out.println(storage.get(3).file().getName());
     }
 }
 

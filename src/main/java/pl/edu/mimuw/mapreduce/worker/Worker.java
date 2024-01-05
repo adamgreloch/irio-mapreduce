@@ -1,9 +1,8 @@
 package pl.edu.mimuw.mapreduce.worker;
 
 import io.grpc.stub.StreamObserver;
-import pl.edu.mimuw.mapreduce.Utils;
-import pl.edu.mimuw.mapreduce.storage.local.FileRep;
-import pl.edu.mimuw.mapreduce.storage.local.LocalStorage;
+import pl.edu.mimuw.mapreduce.storage.FileRep;
+import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
@@ -24,17 +23,17 @@ public class Worker {
     private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.worker");
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        LocalStorage storage = new LocalStorage();
-        Utils.start_service(new WorkerImpl(storage), 50042);
+        // TODO: wait for working impl
+        //Storage storage = new LocalStorage();
+        //Utils.start_service(new WorkerImpl(storage), 50042);
     }
 
     static class WorkerImpl extends WorkerGrpc.WorkerImplBase {
 
-        // TODO: use a more general interface for storage
-        private final LocalStorage storage;
+        private final Storage storage;
         private final ExecutorService pool;
 
-        public WorkerImpl(LocalStorage storage) {
+        public WorkerImpl(Storage storage) {
             this.storage = storage;
             this.pool = Executors.newCachedThreadPool();
         }
@@ -67,7 +66,7 @@ public class Worker {
 
                 try (Processor processor = new Processor(storage, task.getBinId(),
                         request.getDestinationId())) {
-                    for (Iterator<FileRep> it = storage.get_split_iterator(split); it.hasNext(); ) {
+                    for (Iterator<FileRep> it = storage.get_split_iterator(task.getDataDirId(), split); it.hasNext(); ) {
                         FileRep fr = it.next();
 
                         futures.add(pool.submit(() -> {

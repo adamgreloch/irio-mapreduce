@@ -25,6 +25,7 @@ message Task {
   uint64 task_id = 1; // ID of a map/reduce task assigned by task manager
   TaskType task_type = 2;
   int64 bin_id = 3; // binary ID of the task
+  int64 data_dir_id = 4; // directory ID of task data
 }
 
 message Split {
