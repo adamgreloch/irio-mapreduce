@@ -34,7 +34,6 @@ public class BatchManagerTest {
         BatchManagerGrpc.BatchManagerBlockingStub blockingStub = BatchManagerGrpc.newBlockingStub(
                 // Create a client channel and register for automatic graceful shutdown.
                 grpcCleanup.register(InProcessChannelBuilder.forName(serverName).directExecutor().build()));
-
         var maps = List.of(1L, 2L, 3L);
         var reduces = List.of(3L, 4L);
 

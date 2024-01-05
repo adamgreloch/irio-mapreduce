@@ -33,7 +33,7 @@ public class BatchManager {
     }
 
     static class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
-        private final AtomicInteger taskCount = new AtomicInteger(1);
+        private final AtomicInteger taskCount = new AtomicInteger(0);
         private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
         private final Map<Batch, Boolean> finishedMapping = new ConcurrentHashMap<>();
         private final ExecutorService executorService = Executors.newFixedThreadPool(10);
@@ -46,7 +46,7 @@ public class BatchManager {
 
             int nextTaskNr = doneTasks.get(batch);
 
-            if (!finishedMapping.get(batch)) { // we now Map
+            if (finishedMapping.get(batch)) { // we now Reduce
                 if (nextTaskNr >= batch.getReduceBinIdsCount()) {
                     return Optional.empty();
                 }
@@ -55,7 +55,7 @@ public class BatchManager {
                 return Optional.of(builder.build());
             }
 
-            // we now Reduce
+            // we now Map
             if (nextTaskNr >= batch.getMapBinIdsCount()) {
                 return Optional.empty();
             }
@@ -70,6 +70,7 @@ public class BatchManager {
             return new FutureCallback<>() {
                 @Override
                 public void onSuccess(Response result) {
+                    System.out.println("Success--------------");
                     if (result.getStatusCode() != StatusCode.Ok) {
                         statusCode = result.getStatusCode();
                         return;
@@ -98,7 +99,12 @@ public class BatchManager {
 
                 @Override
                 public void onFailure(Throwable t) {
+                    System.out.println("DUPA---------------------");
+                    System.out.println(t.getMessage());
                     statusCode = StatusCode.Err;
+                    Response response = Response.newBuilder().setStatusCode(statusCode).build();
+                    responseObserver.onNext(response);
+                    responseObserver.onCompleted();
                 }
             };
         }
