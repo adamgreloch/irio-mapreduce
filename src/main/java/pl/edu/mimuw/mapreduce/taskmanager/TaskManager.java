@@ -19,7 +19,7 @@ public class TaskManager {
     static class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         @Override
         public void doTask(Task request, StreamObserver<Response> responseObserver) {
-            Response response = Response.newBuilder().setStatusCode(StatusCode.TEST).build();
+            Response response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         }

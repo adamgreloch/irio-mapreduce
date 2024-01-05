@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,10 +35,9 @@ public class BatchManager {
         private final AtomicInteger taskCount = new AtomicInteger(0);
         private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
         private final Map<Batch, Boolean> finishedMapping = new ConcurrentHashMap<>();
-        private final ExecutorService executorService = Executors.newFixedThreadPool(10);
-        private StatusCode statusCode = StatusCode.Ok;
+        private final ExecutorService executorService = Executors.newCachedThreadPool();
 
-        //Zwracamy kolejnego taska do zrobienia w danym batchu, jeśli jakiś istnieje.
+        // Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
         private Optional<Task> getTask(Batch batch) {
             var builder = Task.newBuilder();
             builder.setTaskId(taskCount.getAndIncrement());
@@ -68,11 +66,14 @@ public class BatchManager {
                                                         StreamObserver<Response> responseObserver,
                                                         TaskManagerGrpc.TaskManagerFutureStub taskManagerFutureStub) {
             return new FutureCallback<>() {
+                // onSuccess process send next Task to TaskManager.
                 @Override
                 public void onSuccess(Response result) {
-                    System.out.println("Success--------------");
                     if (result.getStatusCode() != StatusCode.Ok) {
-                        statusCode = result.getStatusCode();
+                        Response response = Response.newBuilder().setStatusCode(result.getStatusCode())
+                                .setMessage("Success but got some internal error.").build();
+                        responseObserver.onNext(response);
+                        responseObserver.onCompleted();
                         return;
                     }
 
@@ -96,13 +97,10 @@ public class BatchManager {
                     ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
                     Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), executorService);
                 }
-
+                // Stop processing batch and send error message.
                 @Override
                 public void onFailure(Throwable t) {
-                    System.out.println("DUPA---------------------");
-                    System.out.println(t.getMessage());
-                    statusCode = StatusCode.Err;
-                    Response response = Response.newBuilder().setStatusCode(statusCode).build();
+                    Response response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
                     responseObserver.onNext(response);
                     responseObserver.onCompleted();
                 }
@@ -112,7 +110,7 @@ public class BatchManager {
         @Override
         public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
             ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137)
-                    .executor(executorService).usePlaintext().build(); // TODO ustawić to dobrze.
+                    .executor(executorService).usePlaintext().build();
             var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
             doneTasks.put(batch, 0);
@@ -121,7 +119,7 @@ public class BatchManager {
 
             Optional<Task> optionalTask = getTask(batch);
             if (optionalTask.isEmpty()) {
-                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.EMPTY_MAP_AND_REDUCE).build());
+                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.EMPTY_MAP_AND_REDUCE).setMessage("No Maps or Reduces to be processed.").build());
                 responseObserver.onCompleted();
                 return;
             }
@@ -129,15 +127,14 @@ public class BatchManager {
             ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optionalTask.get());
 
             Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), executorService);
-            // onNext i onCompleted jest wołane w createCallback.
+            // Both onNext and onCompleted are called in above function.
         }
 
         @Override
         public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
             PingResponse pingResponse = PingResponse.newBuilder()
-                    .setStatusCode(statusCode == StatusCode.Ok ? HealthStatusCode.Healthy : HealthStatusCode.Error)
-                    .build(); // Warto by było się zastanowić jak z tymi kodami
-
+                    .setStatusCode(HealthStatusCode.Healthy)
+                    .build();
             responseObserver.onNext(pingResponse);
             responseObserver.onCompleted();
         }
