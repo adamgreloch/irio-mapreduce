@@ -27,7 +27,7 @@ public class Processor implements AutoCloseable {
         pb.redirectOutput(outputFile);
         pb.command(binary.getAbsolutePath());
         pb.start().waitFor();
-        storage.put_file(destinationId, outputFile);
+        storage.put_file(destinationId, fr.id(), outputFile);
         Files.delete(outputFile.toPath().toAbsolutePath()); // are toAbsolutePath() transforms necessary?
     }
 

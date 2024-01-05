@@ -12,7 +12,7 @@ public interface Storage {
     FileRep get_file(long dir_id, long file_id);
 
     /** Puts a file named file_id to a directory dir_id */
-    void put_file(long dir_id, File file);
+    void put_file(long dir_id, long file_id, File file);
 
     /** Gets an iterator over files from a split of directory dir_id */
     Iterator<FileRep> get_split_iterator(long dir_id, Split split);
