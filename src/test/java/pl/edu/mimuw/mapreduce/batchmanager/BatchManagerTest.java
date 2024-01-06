@@ -7,6 +7,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManager;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -19,11 +20,27 @@ import static org.junit.Assert.assertEquals;
 @RunWith(JUnit4.class)
 public class BatchManagerTest {
 
+    public class TaskManagerThread extends Thread {
+
+        /** Run a TaskManager instance on port 2137. */
+        public void run(){
+            try {
+                TaskManager.start(2137);
+            } catch (Exception e) {
+                System.err.println(e);
+            }
+        }
+    }
+
     @Rule
     public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @Test
     public void batchManagerImpl_shouldDoBatch() throws Exception {
+        // Run a TaskManager instance
+        Thread thread = new TaskManagerThread();
+        thread.start();
+
         // Generate a unique in-process server name.
         String serverName = InProcessServerBuilder.generateName();
 

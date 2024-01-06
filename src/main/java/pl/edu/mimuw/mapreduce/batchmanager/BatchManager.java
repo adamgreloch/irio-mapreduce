@@ -27,6 +27,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class BatchManager {
 
+    enum BatchPhase {
+        Mapping,
+        Reducing
+    }
+
     public static void main(String[] args) throws IOException, InterruptedException {
         Utils.start_service(new BatchManagerImpl(), 50043);
     }
@@ -34,31 +39,35 @@ public class BatchManager {
     static class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         private final AtomicInteger taskCount = new AtomicInteger(0);
         private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
-        private final Map<Batch, Boolean> finishedMapping = new ConcurrentHashMap<>();
+        private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
         private final ExecutorService executorService = Executors.newCachedThreadPool();
 
-        // Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
+        /**
+         * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
+         */
         private Optional<Task> getTask(Batch batch) {
             var builder = Task.newBuilder();
             builder.setTaskId(taskCount.getAndIncrement());
 
             int nextTaskNr = doneTasks.get(batch);
 
-            if (finishedMapping.get(batch)) { // we now Reduce
-                if (nextTaskNr >= batch.getReduceBinIdsCount()) {
-                    return Optional.empty();
+            switch (batchPhases.get(batch)) {
+                case Mapping -> {
+                    if (nextTaskNr >= batch.getMapBinIdsCount()) {
+                        return Optional.empty();
+                    }
+                    builder.setBinId(batch.getMapBinIds(nextTaskNr))
+                            .setTaskType(Task.TaskType.Map);
                 }
-                builder.setBinId(batch.getReduceBinIds(nextTaskNr))
-                        .setTaskType(Task.TaskType.Reduce);
-                return Optional.of(builder.build());
+                case Reducing -> {
+                    if (nextTaskNr >= batch.getReduceBinIdsCount()) {
+                        return Optional.empty();
+                    }
+                    builder.setBinId(batch.getReduceBinIds(nextTaskNr))
+                            .setTaskType(Task.TaskType.Reduce);
+                }
             }
 
-            // we now Map
-            if (nextTaskNr >= batch.getMapBinIdsCount()) {
-                return Optional.empty();
-            }
-            builder.setBinId(batch.getMapBinIds(nextTaskNr))
-                    .setTaskType(Task.TaskType.Map);
             return Optional.of(builder.build());
         }
 
@@ -66,7 +75,7 @@ public class BatchManager {
                                                         StreamObserver<Response> responseObserver,
                                                         TaskManagerGrpc.TaskManagerFutureStub taskManagerFutureStub) {
             return new FutureCallback<>() {
-                // onSuccess process send next Task to TaskManager.
+                /** Try to send next Task to TaskManager. */
                 @Override
                 public void onSuccess(Response result) {
                     if (result.getStatusCode() != StatusCode.Ok) {
@@ -80,15 +89,17 @@ public class BatchManager {
                     int doneTaskNr = doneTasks.get(batch);
                     doneTaskNr++;
 
-                    if (batch.getMapBinIdsCount() <= doneTaskNr) {
+                    if (doneTaskNr >= batch.getMapBinIdsCount()) {
+                        // end of mapping phase
                         doneTasks.put(batch, 0);
-                        finishedMapping.put(batch, true);
+                        batchPhases.put(batch, BatchPhase.Reducing);
                     } else {
                         doneTasks.put(batch, doneTaskNr);
                     }
 
                     Optional<Task> optional = getTask(batch);
                     if (optional.isEmpty()) {
+                        // batch is finished
                         responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.Ok).build());
                         responseObserver.onCompleted();
                         return;
@@ -97,7 +108,8 @@ public class BatchManager {
                     ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
                     Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub), executorService);
                 }
-                // Stop processing batch and send error message.
+
+                /** Stop processing the batch and send error message. */
                 @Override
                 public void onFailure(Throwable t) {
                     Response response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
@@ -107,19 +119,22 @@ public class BatchManager {
             };
         }
 
+        // TODO: add parallel in-batch map processing
         @Override
         public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+            // TODO: implement a global system manager that would provide processes with network config information
+            //  and knowledge about other online processes
             ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137)
                     .executor(executorService).usePlaintext().build();
             var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
             doneTasks.put(batch, 0);
-            finishedMapping.put(batch, false);
+            batchPhases.put(batch, BatchPhase.Mapping);
 
-
+            // Assign first task from batch
             Optional<Task> optionalTask = getTask(batch);
             if (optionalTask.isEmpty()) {
-                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.EMPTY_MAP_AND_REDUCE).setMessage("No Maps or Reduces to be processed.").build());
+                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.Err).setMessage("No Maps or Reduces to be processed.").build());
                 responseObserver.onCompleted();
                 return;
             }
@@ -130,6 +145,7 @@ public class BatchManager {
             // Both onNext and onCompleted are called in above function.
         }
 
+        // TODO: propagate errors from lower layers
         @Override
         public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
             PingResponse pingResponse = PingResponse.newBuilder()

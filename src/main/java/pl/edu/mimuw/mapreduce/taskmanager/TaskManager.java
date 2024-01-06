@@ -16,6 +16,10 @@ public class TaskManager {
         Utils.start_service(new TaskManagerImpl(), 2137);
     }
 
+    public static void start(int port) throws IOException, InterruptedException {
+        Utils.start_service(new TaskManagerImpl(), port);
+    }
+
     static class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         @Override
         public void doTask(Task request, StreamObserver<Response> responseObserver) {
