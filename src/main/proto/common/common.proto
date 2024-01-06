@@ -36,9 +36,11 @@ message Split {
 enum StatusCode {
   Ok = 0;
   Err = 1;
+  EMPTY_MAP_AND_REDUCE = 2;
 }
 
 /* Service responds with a Response message after processing the request */
 message Response {
   StatusCode status_code = 1;
+  string message = 2;
 }
