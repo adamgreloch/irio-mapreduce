@@ -3,6 +3,7 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -12,13 +13,19 @@ import java.io.IOException;
 
 public class TaskManager {
     public static void main(String[] args) throws IOException, InterruptedException {
-        Utils.start_service(new TaskManagerImpl(), 50044);
+        Utils.start_service(new TaskManagerImpl(), 2137);
+    }
+
+    public static void start(int port) throws IOException, InterruptedException {
+        Utils.start_service(new TaskManagerImpl(), port);
     }
 
     static class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         @Override
         public void doTask(Task request, StreamObserver<Response> responseObserver) {
-            throw new RuntimeException("todo");
+            Response response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
         }
 
         @Override
