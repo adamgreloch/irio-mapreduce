@@ -8,7 +8,25 @@ option java_multiple_files = true;
 import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
+/**
+ * Service responsible for managing the state of the system, including:
+ * 1. submitting batches for processing
+ * 2. spawning/killing processes (assigning process type)
+ * 3. checking and reacting to the overall batch-processing latency
+ */
 service Master {
   rpc SubmitBatch(common.Batch) returns (common.Response) {}
+
+  rpc AssignConfig(ProcessInfo) returns (ProcessConfig) {}
+
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
+}
+
+message ProcessInfo {
+  string ip_addr = 1;
+}
+
+message ProcessConfig {
+  uint64 node_id = 1;
+  common.ProcessType process_type = 2;
 }
