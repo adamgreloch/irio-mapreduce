@@ -9,12 +9,13 @@ import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service Worker {
-  rpc DoWork(Request) returns (common.Response) {}
+  rpc DoWork(DoWorkRequest) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
 }
 
-message Request {
+message DoWorkRequest {
   uint64 batch_id = 1;
   common.Task task = 2;
   common.Split split = 3;
+  uint64 destination_id = 4; // Processed files are put to a location with this ID
 }
