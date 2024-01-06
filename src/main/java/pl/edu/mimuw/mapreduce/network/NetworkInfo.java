@@ -12,6 +12,6 @@ public interface NetworkInfo {
     /** Removes a sockAddr from a database of available processes. */
     void remove(InetSocketAddress sockAddr);
 
-    /** Gets InetSocketAddress of a process with type in a round-robin fashion. */
+    /** Gets InetSocketAddress of a process with type in round-robin fashion. */
     InetSocketAddress get(ProcessType type);
 }
