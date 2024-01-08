@@ -1,7 +1,6 @@
 package pl.edu.mimuw.mapreduce.worker;
 
 import io.grpc.stub.StreamObserver;
-import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
@@ -12,11 +11,9 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Worker {
@@ -64,26 +61,28 @@ public class Worker {
 
                 StatusCode statusCode;
 
-                try (Processor processor = new Processor(storage, task.getBinId(),
-                        request.getDestinationId())) {
-                    for (Iterator<FileRep> it = storage.getSplitIterator(task.getDataDirId(), split); it.hasNext(); ) {
-                        FileRep fr = it.next();
+                // TODO do all the maps or reduce+combine
+                //  file processing should happen in parallel and independent of each other
+                // try (Processor processor = new Processor(storage, task.getTaskBinIds(),
+                //         task.getDestinationId())) {
+                //     for (Iterator<FileRep> it = storage.getSplitIterator(task.getDataDirId(), split); it.hasNext(); ) {
+                //         FileRep fr = it.next();
 
-                        futures.add(pool.submit(() -> {
-                            processor.process_file(fr);
-                            return null;
-                        }));
-                    }
+                //         futures.add(pool.submit(() -> {
+                //             processor.process_file(fr);
+                //             return null;
+                //         }));
+                //     }
 
-                    for (var fut : futures) {
-                        fut.get();
-                    }
-                    statusCode = StatusCode.Ok;
+                //     for (var fut : futures) {
+                //         fut.get();
+                //     }
+                //     statusCode = StatusCode.Ok;
 
-                } catch (Exception e) {
-                    statusCode = StatusCode.Err;
-                    logger.log(Level.WARNING, "processing failed: ", e);
-                }
+                // } catch (Exception e) {
+                //     statusCode = StatusCode.Err;
+                //     logger.log(Level.WARNING, "processing failed: ", e);
+                // }
 
                 var response = Response.newBuilder().setStatusCode(statusCode).build();
                 responseObserver.onNext(response);

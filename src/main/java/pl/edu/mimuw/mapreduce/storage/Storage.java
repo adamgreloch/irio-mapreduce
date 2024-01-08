@@ -4,6 +4,7 @@ import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
 import java.util.Iterator;
+import java.util.List;
 
 public interface Storage {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
@@ -20,6 +21,9 @@ public interface Storage {
 
     /** Gets a number of files in directory dirId */
     long getFileCount(long dirId);
+
+    /** Splits a directory id range into equal splits */
+    List<Split> getSplitsForDir(long dirId, int splits);
 
     /** Gets an iterator over files from a split of directory dirId */
     Iterator<FileRep> getSplitIterator(long dirId, Split split);

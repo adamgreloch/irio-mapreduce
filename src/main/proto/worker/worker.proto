@@ -8,14 +8,26 @@ option java_multiple_files = true;
 import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
+// Service capable of applying a sequence of map operations or one reduce on a range of files (called split).
 service Worker {
+  // Apply all transformations specified in DoWorkRequest.task.
+  // This is either a sequence of map operations or one reduce transformation.
   rpc DoWork(DoWorkRequest) returns (common.Response) {}
+
+  // Combines results from split into one file
+  rpc DoCombine(CombineRequest) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {} // probably not needed
 }
 
 message DoWorkRequest {
-  uint64 batch_id = 1;
-  common.Task task = 2;
-  common.Split split = 3;
-  uint64 destination_id = 4; // Processed files are put to a location with this ID
+  common.Task task = 1;
+  common.Split split = 2;
+}
+
+// Output file_id should match split1.beg
+message CombineRequest {
+  uint64 combine_bin_id = 1;
+  uint64 dest_dir_id = 2;
+  common.Split split1 = 3;
+  common.Split split2 = 4;
 }
