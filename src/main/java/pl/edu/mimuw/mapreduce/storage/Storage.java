@@ -8,20 +8,22 @@ import java.util.Iterator;
 public interface Storage {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
 
-    /** Retrieves a file named file_id from a directory dir_id */
-    FileRep get_file(long dir_id, long file_id);
+    /* Reserved directory levels */
+    long BINARY_DIR = 0;
+    long MAPREDUCE_MIN = BINARY_DIR + 1;
 
-    /** Puts a file named file_id to a directory dir_id */
-    void put_file(long dir_id, long file_id, File file);
+    /** Retrieves a file with id fileId from a directory dirId */
+    FileRep getFile(long dirId, long fileId);
 
-    /** Gets an iterator over files from a split of directory dir_id */
-    Iterator<FileRep> get_split_iterator(long dir_id, Split split);
+    /** Puts a file with id fileId to a directory dirId */
+    void putFile(long dirId, long fileId, File file);
 
-    /* Binaries are stored in a space isolated from normal files. */
+    /** Gets a number of files in directory dirId */
+    long getFileCount(long dirId);
 
-    /** Retrieves executable binary by its bin_id */
-    File get_binary(long bin_id);
+    /** Gets an iterator over files from a split of directory dirId */
+    Iterator<FileRep> getSplitIterator(long dirId, Split split);
 
-    /** Puts executable binary to storage under bin_id */
-    void put_binary(long bin_id, File file);
+     /** Gets an iterator over all files in a directory dirId */
+    Iterator<FileRep> getDirIterator(long dirId);
 }

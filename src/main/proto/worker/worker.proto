@@ -10,7 +10,7 @@ import "healthcheck/healthcheck.proto";
 
 service Worker {
   rpc DoWork(DoWorkRequest) returns (common.Response) {}
-  rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {}
+  rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {} // probably not needed
 }
 
 message DoWorkRequest {

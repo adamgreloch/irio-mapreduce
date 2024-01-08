@@ -66,7 +66,7 @@ public class Worker {
 
                 try (Processor processor = new Processor(storage, task.getBinId(),
                         request.getDestinationId())) {
-                    for (Iterator<FileRep> it = storage.get_split_iterator(task.getDataDirId(), split); it.hasNext(); ) {
+                    for (Iterator<FileRep> it = storage.getSplitIterator(task.getDataDirId(), split); it.hasNext(); ) {
                         FileRep fr = it.next();
 
                         futures.add(pool.submit(() -> {

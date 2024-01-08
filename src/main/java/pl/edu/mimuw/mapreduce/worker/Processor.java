@@ -15,7 +15,7 @@ public class Processor implements AutoCloseable {
 
     public Processor(Storage storage, long binId, long destinationId) throws IOException {
         this.storage = storage;
-        this.binary = storage.get_binary(binId);
+        this.binary = storage.getFile(Storage.BINARY_DIR, binId).file();
         this.destinationId = destinationId;
         this.tempDir = Files.createTempDirectory("processor").toFile().getAbsolutePath();
     }
@@ -27,7 +27,7 @@ public class Processor implements AutoCloseable {
         pb.redirectOutput(outputFile);
         pb.command(binary.getAbsolutePath());
         pb.start().waitFor();
-        storage.put_file(destinationId, fr.id(), outputFile);
+        storage.putFile(destinationId, fr.id(), outputFile);
         Files.delete(outputFile.toPath().toAbsolutePath()); // are toAbsolutePath() transforms necessary?
     }
 
