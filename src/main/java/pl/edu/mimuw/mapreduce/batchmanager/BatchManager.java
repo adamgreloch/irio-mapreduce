@@ -126,8 +126,8 @@ public class BatchManager {
             int port;
 
             if (NetworkConfig.IS_KUBERNETES) {
-                hostname = NetworkConfig.WORKERS_HOST;
-                port = NetworkConfig.WORKERS_PORT;
+                hostname = NetworkConfig.TASK_MANAGERS_HOST;
+                port = NetworkConfig.TASK_MANAGERS_PORT;
             } else {
                 hostname = "localhost";
                 port = 2137;
