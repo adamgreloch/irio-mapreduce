@@ -25,6 +25,9 @@ def protobufVersion = '3.24.0'
 def protocVersion = protobufVersion
 
 dependencies {
+    implementation platform('com.google.cloud:libraries-bom:26.29.0')
+    implementation 'com.google.cloud:google-cloud-storage'
+
     implementation "io.grpc:grpc-protobuf:${grpcVersion}"
     implementation "io.grpc:grpc-services:${grpcVersion}"
     implementation "io.grpc:grpc-stub:${grpcVersion}"
@@ -38,8 +41,6 @@ dependencies {
     testImplementation "io.grpc:grpc-testing:${grpcVersion}"
     testImplementation "junit:junit:4.13.2"
     testImplementation "org.mockito:mockito-core:3.4.0"
-
-    implementation 'com.google.cloud:google-cloud-storage:2.30.1'
 }
 
 protobuf {

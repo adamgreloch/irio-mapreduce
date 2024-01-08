@@ -7,6 +7,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -119,12 +120,19 @@ public class BatchManager {
             };
         }
 
-        // TODO: add parallel in-batch map processing
         @Override
         public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
-            // TODO: implement a global system manager that would provide processes with network config information
-            //  and knowledge about other online processes
-            ManagedChannel managedChannel = ManagedChannelBuilder.forAddress("localhost", 2137)
+            String hostname;
+            int port;
+
+            if (NetworkConfig.IS_KUBERNETES) {
+                hostname = NetworkConfig.WORKERS_HOST;
+                port = NetworkConfig.WORKERS_PORT;
+            } else {
+                hostname = "localhost";
+                port = 2137;
+            }
+            ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostname, port)
                     .executor(executorService).usePlaintext().build();
             var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
