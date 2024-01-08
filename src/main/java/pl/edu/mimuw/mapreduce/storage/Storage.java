@@ -1,6 +1,5 @@
 package pl.edu.mimuw.mapreduce.storage;
 
-import pl.edu.mimuw.proto.common.ProcessType;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
@@ -10,9 +9,7 @@ public interface Storage {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
 
     /* Reserved directory levels */
-    long NETWORK_DIR_MIN = 0;
-    long NETWORK_DIR_MAX = ProcessType.values().length - 1;
-    long BINARY_DIR = NETWORK_DIR_MAX + 1;
+    long BINARY_DIR = 0;
     long MAPREDUCE_MIN = BINARY_DIR + 1;
 
     /** Retrieves a file with id fileId from a directory dirId */
