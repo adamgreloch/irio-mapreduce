@@ -57,14 +57,18 @@ public class BatchManager {
                     if (nextTaskNr >= batch.getMapBinIdsCount()) {
                         return Optional.empty();
                     }
-                    builder.setBinId(batch.getMapBinIds(nextTaskNr))
-                            .setTaskType(Task.TaskType.Map);
+                    builder.setTaskType(Task.TaskType.Map).setBeginFromId(0);
+                    //TODO set begin from id, by checking storage on whether some maps were already completed for provided batch.
+                    // For example if error occurred and we need to pick up work from other taskManager.
+                    for(int i = 0; i < batch.getMapBinIdsCount(); i++){
+                        builder.setTaskBinIds(i, batch.getMapBinIds(i));
+                    }
                 }
                 case Reducing -> {
                     if (nextTaskNr >= batch.getReduceBinIdsCount()) {
                         return Optional.empty();
                     }
-                    builder.setBinId(batch.getReduceBinIds(nextTaskNr))
+                    builder.setTaskBinIds(0, batch.getReduceBinIds(nextTaskNr))
                             .setTaskType(Task.TaskType.Reduce);
                 }
             }
@@ -86,11 +90,12 @@ public class BatchManager {
                         responseObserver.onCompleted();
                         return;
                     }
-
+                    // TODO check if every map was executed on input, by checking some value in storage.
+                    // If so set BatchPhase to Reducing.
                     int doneTaskNr = doneTasks.get(batch);
                     doneTaskNr++;
 
-                    if (doneTaskNr >= batch.getMapBinIdsCount()) {
+                    if (batchPhases.get(batch).equals(BatchPhase.Mapping)) {
                         // end of mapping phase
                         doneTasks.put(batch, 0);
                         batchPhases.put(batch, BatchPhase.Reducing);
