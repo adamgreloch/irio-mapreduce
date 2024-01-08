@@ -21,21 +21,6 @@ public interface Storage {
     /** Puts a file with id fileId to a directory dirId */
     void putFile(long dirId, long fileId, File file);
 
-    /**
-     * Puts a file named filename with content to a directory dirId. File id
-     * is chosen arbitrarily.
-     */
-    void putFile(long dirId, String filename, String content);
-
-    /** Gets a filename of a file with id fileId in a directory dirId */
-    String getFileName(long dirId, long fileId);
-
-    /** Updates a file named filename in directory dirId to contain newContent */
-    void updateFile(long dirId, String filename, String newContent);
-
-    /** Removes a file named filename from a directory dirId */
-    void removeFile(long dirId, String filename);
-
     /** Gets a number of files in directory dirId */
     long getFileCount(long dirId);
 
