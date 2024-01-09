@@ -124,7 +124,7 @@ public class TaskManager {
                     if (isReduce) {
 
                         //TODO we must sort splits if they aren't sorted.
-                        Queue<Split> splitQueue = new LinkedList<>();
+                        Queue<Split> splitQueue = new LinkedList<>(splits);
                         List<Future<Response>> futures = new ArrayList<>();
 
                         while (splitQueue.size() > 1) {
@@ -149,27 +149,29 @@ public class TaskManager {
                                 ListenableFuture<Response> listenableFuture = workerFutureStub.doCombine(combineRequest);
                                 futures.add(listenableFuture);
 
+                                assert s1 != null;
+                                assert s2 != null;
                                 splitQueue.add(mergeSplits(s1, s2));
                             }
                             for (var future : futures) {
                                 try {
                                     var workerResponse = future.get();
                                     if (workerResponse.getStatusCode() == StatusCode.Err) {
-                                        throw new RuntimeException("TODO implement this");
+                                        response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage("Internal error").build();
+                                        responseObserver.onNext(response);
+                                        responseObserver.onCompleted();
+                                        return;
                                     }
 
                                 } catch (ExecutionException e) {
-                                    throw new RuntimeException(e);// TODO handle this
+                                    response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
+                                    responseObserver.onNext(response);
+                                    responseObserver.onCompleted();
+                                    return;
                                 }
                             }
                             futures.clear();
                         }
-                        // If reduce was done, it is now necessary to combine the partial results from
-                        // all splits to one file, so it represents the result of the whole input.
-                        // TaskManager can orchestrate the process by assigning Combine tasks to
-                        // workers in a way that achieves a logarithmic complexity.
-
-                        // ...TODO
                     }
 
                     response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
