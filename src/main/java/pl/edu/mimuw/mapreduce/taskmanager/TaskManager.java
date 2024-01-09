@@ -128,7 +128,10 @@ public class TaskManager {
                         List<Future<Response>> futures = new ArrayList<>();
 
                         while (splitQueue.size() > 1) {
-                            for (int i = 0; i + 1 < splitQueue.size(); i += 2) {
+                            var phaseSize = splitQueue.size();
+                            if (phaseSize % 2 != 0) phaseSize--;
+
+                            for (int i = 0; i < phaseSize; i += 2) {
                                 Split s1 = splitQueue.poll();
                                 Split s2 = splitQueue.poll();
 
