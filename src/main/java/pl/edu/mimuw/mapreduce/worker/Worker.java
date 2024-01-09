@@ -10,10 +10,9 @@ import pl.edu.mimuw.proto.worker.DoWorkRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Worker {
@@ -45,10 +44,9 @@ public class Worker {
             throw new RuntimeException("todo");
         }
 
-        class Handler implements Runnable {
+        private class Handler implements Runnable {
             private final DoWorkRequest request;
             private final StreamObserver<Response> responseObserver;
-            private final ArrayList<Future<Void>> futures = new ArrayList<>();
 
             Handler(DoWorkRequest request, StreamObserver<Response> responseObserver) {
                 this.request = request;
@@ -61,28 +59,14 @@ public class Worker {
 
                 StatusCode statusCode;
 
-                // TODO do all the maps or reduce+combine
-                //  file processing should happen in parallel and independent of each other
-                // try (Processor processor = new Processor(storage, task.getTaskBinIds(),
-                //         task.getDestinationId())) {
-                //     for (Iterator<FileRep> it = storage.getSplitIterator(task.getDataDirId(), split); it.hasNext(); ) {
-                //         FileRep fr = it.next();
-
-                //         futures.add(pool.submit(() -> {
-                //             processor.process_file(fr);
-                //             return null;
-                //         }));
-                //     }
-
-                //     for (var fut : futures) {
-                //         fut.get();
-                //     }
-                //     statusCode = StatusCode.Ok;
-
-                // } catch (Exception e) {
-                //     statusCode = StatusCode.Err;
-                //     logger.log(Level.WARNING, "processing failed: ", e);
-                // }
+                try (var processor = new ConcurrentProcessor(storage, split, task.getTaskBinIdsList(),
+                        task.getDataDirId(), task.getDestinationId())) {
+                    processor.run();
+                    statusCode = StatusCode.Ok;
+                } catch (Exception e) {
+                    statusCode = StatusCode.Err;
+                    logger.log(Level.WARNING, "processing failed: ", e);
+                }
 
                 var response = Response.newBuilder().setStatusCode(statusCode).build();
                 responseObserver.onNext(response);
