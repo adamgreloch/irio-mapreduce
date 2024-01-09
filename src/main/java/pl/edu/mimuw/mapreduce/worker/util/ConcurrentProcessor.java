@@ -1,15 +1,14 @@
-package pl.edu.mimuw.mapreduce.worker;
+package pl.edu.mimuw.mapreduce.worker.util;
 
 import pl.edu.mimuw.mapreduce.storage.FileRep;
+import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.*;
 
 public class ConcurrentProcessor implements AutoCloseable {
@@ -34,14 +33,54 @@ public class ConcurrentProcessor implements AutoCloseable {
             this.binaries.put(binId, storage.getFile(Storage.BINARY_DIR, binId).file());
     }
 
-    public void run() throws ExecutionException, InterruptedException {
+    public void map() throws ExecutionException, InterruptedException {
         ArrayList<Future<Void>> futures = new ArrayList<>();
         for (Iterator<FileRep> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
             FileRep fr = it.next();
-            futures.add(pool.submit(new FileProcessor(fr)));
+            futures.add(pool.submit(new FileProcessor(fr, binaries.size())));
         }
         for (var future : futures)
             future.get();
+    }
+
+    public void reduce() throws ExecutionException, InterruptedException {
+        ArrayList<Future<Void>> futures = new ArrayList<>();
+        // Reduce phase
+        for (Iterator<FileRep> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
+            FileRep fr = it.next();
+            futures.add(pool.submit(new FileProcessor(fr, 1)));
+        }
+        for (var future : futures)
+            future.get();
+
+        // Combine phase
+        Queue<SplitBuilder> queue = new LinkedList<>();
+
+        var combiner = new Combiner(storage, dataDir, destinationId, this.binaries.get(1L));
+
+        for (long fileId = split.getBeg(); fileId < split.getEnd(); fileId++)
+            queue.add(new SplitBuilder(fileId, fileId + 1));
+
+        while (queue.size() > 1) {
+            var phaseSize = queue.size();
+            if (phaseSize % 2 != 0) phaseSize--;
+
+            for (int i = 0; i < phaseSize; i += 2) {
+                var s1 = queue.poll();
+                var s2 = queue.poll();
+
+                futures.add(pool.submit(() -> {
+                    combiner.combine(s1, s2);
+                    return null;
+                }));
+
+                assert s2 != null;
+                queue.add(SplitBuilder.merge(s1, s2));
+            }
+
+            for (var future : futures)
+                future.get();
+        }
     }
 
     @Override
@@ -53,9 +92,11 @@ public class ConcurrentProcessor implements AutoCloseable {
 
     private class FileProcessor implements Callable<Void> {
         private final FileRep fr;
+        private final long binaryCount;
 
-        FileProcessor(FileRep fr) {
+        FileProcessor(FileRep fr, long binaryCount) {
             this.fr = fr;
+            this.binaryCount = binaryCount;
         }
 
         @Override
@@ -65,16 +106,15 @@ public class ConcurrentProcessor implements AutoCloseable {
             var files = new File[]{inputFile, outputFile};
 
             var pb = new ProcessBuilder();
-            var n = binaries.size();
 
-            for (long i = 0; i < n; i++) {
+            for (long i = 0; i < binaryCount + 1; i++) {
                 pb.redirectInput(files[(int) (i % 2)]);
                 pb.redirectOutput(files[(int) (1 - i % 2)]);
                 pb.command(binaries.get(i).getAbsolutePath());
                 pb.start().waitFor();
             }
 
-            storage.putFile(destinationId, fr.id(), files[n - 1]);
+            storage.putFile(destinationId, fr.id(), files[(int) binaryCount]);
             return null;
         }
     }

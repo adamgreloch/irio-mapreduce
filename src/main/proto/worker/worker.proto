@@ -14,8 +14,8 @@ service Worker {
   // This is either a sequence of map operations or one reduce transformation.
   rpc DoWork(DoWorkRequest) returns (common.Response) {}
 
-  // Combines results from split into one file
-  rpc DoCombine(CombineRequest) returns (common.Response) {}
+  // Combines results from two adjacent splits into one file
+  rpc DoCombine(DoCombineRequest) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {} // probably not needed
 }
 
@@ -25,9 +25,10 @@ message DoWorkRequest {
 }
 
 // Output file_id should match split1.beg
-message CombineRequest {
+message DoCombineRequest {
   uint64 combine_bin_id = 1;
-  uint64 dest_dir_id = 2;
-  common.Split split1 = 3;
-  common.Split split2 = 4;
+  uint64 input_dir_id = 2;
+  uint64 dest_dir_id = 3;
+  common.Split split1 = 4;
+  common.Split split2 = 5;
 }
