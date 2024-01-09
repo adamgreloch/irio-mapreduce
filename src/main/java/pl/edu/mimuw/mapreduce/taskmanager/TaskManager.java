@@ -7,19 +7,18 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
-import pl.edu.mimuw.proto.common.Response;
-import pl.edu.mimuw.proto.common.StatusCode;
-import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
+import pl.edu.mimuw.proto.worker.CombineRequest;
 import pl.edu.mimuw.proto.worker.DoWorkRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.IOException;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskManager {
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -123,6 +122,42 @@ public class TaskManager {
                     operationsDoneLatch.await();
 
                     if (isReduce) {
+
+                        //TODO we must sort splits if they aren't sorted.
+                        Queue<Split> splitQueue = new LinkedList<>();
+                        List<Future<Response>> futures = new ArrayList<>();
+
+                        while (splitQueue.size() > 1) {
+                            for (int i = 0; i + 1 < splitQueue.size(); i += 2) {
+                                Split s1 = splitQueue.poll();
+                                Split s2 = splitQueue.poll();
+
+                                var managedChannel =
+                                        ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
+                                var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
+
+                                var combineRequest = CombineRequest.newBuilder()
+                                        .setCombineBinId(task.getTaskBinIds(1))
+                                        .setDestDirId(task.getDataDirId())
+                                        .setSplit1(s1)
+                                        .setSplit2(s2)
+                                        .build();
+
+                                ListenableFuture<Response> listenableFuture = workerFutureStub.doCombine(combineRequest);
+                                futures.add(listenableFuture);
+
+                                splitQueue.add(mergeSplits(s1, s2));
+                            }
+                            for (var future : futures) {
+                                try {
+                                    var workerResponse = future.get();
+
+                                } catch (ExecutionException e) {
+                                    throw new RuntimeException(e);// TODO handle this
+                                }
+                            }
+                            futures.clear();
+                        }
                         // If reduce was done, it is now necessary to combine the partial results from
                         // all splits to one file, so it represents the result of the whole input.
                         // TaskManager can orchestrate the process by assigning Combine tasks to
@@ -138,6 +173,22 @@ public class TaskManager {
 
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
+            }
+        }
+
+        private Split mergeSplits(Split s1, Split s2) {
+            if (s1.getBeg() < s2.getBeg()) {
+                return Split.newBuilder()
+                        .setSplitId(s1.getSplitId())
+                        .setBeg(s1.getBeg())
+                        .setEnd(s2.getEnd())
+                        .build();
+            } else {
+                return Split.newBuilder()
+                        .setSplitId(s2.getSplitId())
+                        .setBeg(s2.getBeg())
+                        .setEnd(s1.getEnd())
+                        .build();
             }
         }
     }

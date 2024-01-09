@@ -60,7 +60,7 @@ public class BatchManager {
                     builder.setTaskType(Task.TaskType.Map).setBeginFromId(0);
                     //TODO set begin from id, by checking storage on whether some maps were already completed for provided batch.
                     // For example if error occurred and we need to pick up work from other taskManager.
-                    for(int i = 0; i < batch.getMapBinIdsCount(); i++){
+                    for (int i = 0; i < batch.getMapBinIdsCount(); i++) {
                         builder.setTaskBinIds(i, batch.getMapBinIds(i));
                     }
                 }
