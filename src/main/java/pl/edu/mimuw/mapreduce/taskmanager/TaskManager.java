@@ -151,6 +151,9 @@ public class TaskManager {
                             for (var future : futures) {
                                 try {
                                     var workerResponse = future.get();
+                                    if (workerResponse.getStatusCode() == StatusCode.Err) {
+                                        throw new RuntimeException("TODO implement this");
+                                    }
 
                                 } catch (ExecutionException e) {
                                     throw new RuntimeException(e);// TODO handle this
