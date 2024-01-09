@@ -7,7 +7,10 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
-import pl.edu.mimuw.proto.common.*;
+import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.Split;
+import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
@@ -16,9 +19,11 @@ import pl.edu.mimuw.proto.worker.DoWorkRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskManager {
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -122,8 +127,11 @@ public class TaskManager {
                     operationsDoneLatch.await();
 
                     if (isReduce) {
+                        // If reduce was done, it is now necessary to combine the partial results from
+                        // all splits to one file, so it represents the result of the whole input.
+                        // TaskManager can orchestrate the process by assigning Combine tasks to
+                        // workers in a way that achieves a logarithmic complexity.
 
-                        //TODO we must sort splits if they aren't sorted.
                         Queue<Split> splitQueue = new LinkedList<>(splits);
                         List<Future<Response>> futures = new ArrayList<>();
 
@@ -139,14 +147,11 @@ public class TaskManager {
                                         ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
                                 var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
 
-                                var combineRequest = CombineRequest.newBuilder()
-                                        .setCombineBinId(task.getTaskBinIds(1))
-                                        .setDestDirId(task.getDataDirId())
-                                        .setSplit1(s1)
-                                        .setSplit2(s2)
-                                        .build();
+                                var combineRequest =
+                                        CombineRequest.newBuilder().setCombineBinId(task.getTaskBinIds(1)).setDestDirId(task.getDataDirId()).setSplit1(s1).setSplit2(s2).build();
 
-                                ListenableFuture<Response> listenableFuture = workerFutureStub.doCombine(combineRequest);
+                                ListenableFuture<Response> listenableFuture =
+                                        workerFutureStub.doCombine(combineRequest);
                                 futures.add(listenableFuture);
 
                                 assert s1 != null;
@@ -157,14 +162,16 @@ public class TaskManager {
                                 try {
                                     var workerResponse = future.get();
                                     if (workerResponse.getStatusCode() == StatusCode.Err) {
-                                        response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage("Internal error").build();
+                                        response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(
+                                                "Internal error").build();
                                         responseObserver.onNext(response);
                                         responseObserver.onCompleted();
                                         return;
                                     }
 
                                 } catch (ExecutionException e) {
-                                    response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
+                                    response =
+                                            Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
                                     responseObserver.onNext(response);
                                     responseObserver.onCompleted();
                                     return;
@@ -186,17 +193,9 @@ public class TaskManager {
 
         private Split mergeSplits(Split s1, Split s2) {
             if (s1.getBeg() < s2.getBeg()) {
-                return Split.newBuilder()
-                        .setSplitId(s1.getSplitId())
-                        .setBeg(s1.getBeg())
-                        .setEnd(s2.getEnd())
-                        .build();
+                return Split.newBuilder().setSplitId(s1.getSplitId()).setBeg(s1.getBeg()).setEnd(s2.getEnd()).build();
             } else {
-                return Split.newBuilder()
-                        .setSplitId(s2.getSplitId())
-                        .setBeg(s2.getBeg())
-                        .setEnd(s1.getEnd())
-                        .build();
+                return Split.newBuilder().setSplitId(s2.getSplitId()).setBeg(s2.getBeg()).setEnd(s1.getEnd()).build();
             }
         }
     }
