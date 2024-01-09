@@ -11,6 +11,11 @@ public class SplitBuilder {
         this.end = end;
     }
 
+    public SplitBuilder(Split split) {
+        this.beg = split.getBeg();
+        this.end = split.getEnd();
+    }
+
     public static SplitBuilder merge(SplitBuilder s1, SplitBuilder s2) {
         if (s2.end == s1.beg) return merge(s2, s1);
         if (s1.end != s2.beg) throw new RuntimeException("splits are not adjacent");

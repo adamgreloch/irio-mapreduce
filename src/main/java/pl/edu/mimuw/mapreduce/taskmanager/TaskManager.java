@@ -6,15 +6,15 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
+import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Response;
-import pl.edu.mimuw.proto.common.Split;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
-import pl.edu.mimuw.proto.worker.CombineRequest;
+import pl.edu.mimuw.proto.worker.DoCombineRequest;
 import pl.edu.mimuw.proto.worker.DoWorkRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
@@ -23,7 +23,10 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
-import java.util.concurrent.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class TaskManager {
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -132,7 +135,9 @@ public class TaskManager {
                         // TaskManager can orchestrate the process by assigning Combine tasks to
                         // workers in a way that achieves a logarithmic complexity.
 
-                        Queue<Split> splitQueue = new LinkedList<>(splits);
+                        Queue<SplitBuilder> splitQueue = new LinkedList<>();
+                        for (var split : splits)
+                            splitQueue.add(new SplitBuilder(split));
                         List<Future<Response>> futures = new ArrayList<>();
 
                         while (splitQueue.size() > 1) {
@@ -140,62 +145,38 @@ public class TaskManager {
                             if (phaseSize % 2 != 0) phaseSize--;
 
                             for (int i = 0; i < phaseSize; i += 2) {
-                                Split s1 = splitQueue.poll();
-                                Split s2 = splitQueue.poll();
+                                var s1 = splitQueue.poll();
+                                var s2 = splitQueue.poll();
 
                                 var managedChannel =
                                         ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
                                 var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
 
+                                assert s1 != null;
+                                assert s2 != null;
                                 var combineRequest =
-                                        CombineRequest.newBuilder().setCombineBinId(task.getTaskBinIds(1)).setDestDirId(task.getDataDirId()).setSplit1(s1).setSplit2(s2).build();
+                                        DoCombineRequest.newBuilder().setCombineBinId(task.getTaskBinIds(1)).setDestDirId(task.getDataDirId()).setSplit1(s1.build()).setSplit2(s2.build()).build();
 
                                 ListenableFuture<Response> listenableFuture =
                                         workerFutureStub.doCombine(combineRequest);
                                 futures.add(listenableFuture);
 
-                                assert s1 != null;
-                                assert s2 != null;
-                                splitQueue.add(mergeSplits(s1, s2));
+                                splitQueue.add(SplitBuilder.merge(s1, s2));
                             }
                             for (var future : futures) {
-                                try {
-                                    var workerResponse = future.get();
-                                    if (workerResponse.getStatusCode() == StatusCode.Err) {
-                                        response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(
-                                                "Internal error").build();
-                                        responseObserver.onNext(response);
-                                        responseObserver.onCompleted();
-                                        return;
-                                    }
-
-                                } catch (ExecutionException e) {
-                                    response =
-                                            Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
-                                    responseObserver.onNext(response);
-                                    responseObserver.onCompleted();
-                                    return;
-                                }
+                                var workerResponse = future.get();
                             }
                             futures.clear();
                         }
                     }
 
                     response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
-                } catch (InterruptedException e) {
+                } catch (Exception e) {
                     response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
                 }
 
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
-            }
-        }
-
-        private Split mergeSplits(Split s1, Split s2) {
-            if (s1.getBeg() < s2.getBeg()) {
-                return Split.newBuilder().setSplitId(s1.getSplitId()).setBeg(s1.getBeg()).setEnd(s2.getEnd()).build();
-            } else {
-                return Split.newBuilder().setSplitId(s2.getSplitId()).setBeg(s2.getBeg()).setEnd(s1.getEnd()).build();
             }
         }
     }

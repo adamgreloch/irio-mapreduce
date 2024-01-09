@@ -52,6 +52,7 @@ public class ConcurrentProcessor implements AutoCloseable {
         }
         for (var future : futures)
             future.get();
+        futures.clear();
 
         // Combine phase
         Queue<SplitBuilder> queue = new LinkedList<>();
@@ -80,6 +81,7 @@ public class ConcurrentProcessor implements AutoCloseable {
 
             for (var future : futures)
                 future.get();
+            futures.clear();
         }
     }
 
