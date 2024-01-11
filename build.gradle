@@ -4,61 +4,92 @@ plugins {
     id 'com.google.protobuf' version '0.9.4'
     // Generate IntelliJ IDEA's .idea & .iml project files
     id 'idea'
-}
 
-repositories {
-    maven { // The google mirror is less flaky than mavenCentral()
-        url "https://maven-central.storage-download.googleapis.com/maven2/" }
-    mavenCentral()
-    mavenLocal()
-}
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
-    }
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    id 'com.bmuschko.docker-remote-api' version '7.2.0'
+    id 'com.bmuschko.docker-java-application' version '6.7.0'
 }
 
 def grpcVersion = '1.60.1'
 def protobufVersion = '3.24.0'
 def protocVersion = protobufVersion
 
-dependencies {
-    implementation platform('com.google.cloud:libraries-bom:26.29.0')
-    implementation 'com.google.cloud:google-cloud-storage'
+group = "pl.edu.mimuw.mapreduce"
 
-    implementation "io.grpc:grpc-protobuf:${grpcVersion}"
-    implementation "io.grpc:grpc-services:${grpcVersion}"
-    implementation "io.grpc:grpc-stub:${grpcVersion}"
-    compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+allprojects {
+    plugins.withType(JavaPlugin).tap {
+        configureEach {
+            repositories {
+                maven { // The google mirror is less flaky than mavenCentral()
+                    url "https://maven-central.storage-download.googleapis.com/maven2/"
+                }
+                mavenCentral()
+                mavenLocal()
+            }
 
-    // examples/advanced need this for JsonFormat
-    implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+            java {
+                toolchain {
+                    languageVersion = JavaLanguageVersion.of(17)
+                }
+                sourceCompatibility = JavaVersion.VERSION_17
+                targetCompatibility = JavaVersion.VERSION_17
+            }
 
-    runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+            dependencies {
+                implementation platform('com.google.cloud:libraries-bom:26.29.0')
+                implementation 'com.google.cloud:google-cloud-storage'
 
-    testImplementation "io.grpc:grpc-testing:${grpcVersion}"
-    testImplementation "junit:junit:4.13.2"
-    testImplementation "org.mockito:mockito-core:3.4.0"
+                implementation "io.grpc:grpc-protobuf:${grpcVersion}"
+                implementation "io.grpc:grpc-services:${grpcVersion}"
+                implementation "io.grpc:grpc-stub:${grpcVersion}"
+                compileOnly "org.apache.tomcat:annotations-api:6.0.53"
+
+                // examples/advanced need this for JsonFormat
+                implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
+
+                runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
+
+                testImplementation "io.grpc:grpc-testing:${grpcVersion}"
+                testImplementation "junit:junit:4.13.2"
+                testImplementation "org.mockito:mockito-core:3.4.0"
+            }
+
+            protobuf {
+                protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
+                plugins {
+                    grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
+                }
+                generateProtoTasks {
+                    all()*.plugins { grpc {} }
+                }
+            }
+
+            // Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
+            sourceSets {
+                main {
+                    java {
+                        srcDirs 'build/generated/source/proto/main/grpc'
+                        srcDirs 'build/generated/source/proto/main/java'
+                    }
+                }
+            }
+        }
+    }
 }
 
-protobuf {
-    protoc { artifact = "com.google.protobuf:protoc:${protocVersion}" }
-    plugins {
-        grpc { artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}" }
-    }
-    generateProtoTasks {
-        all()*.plugins { grpc {} }
-    }
-}
+subprojects {
+    apply plugin: 'application'
+    apply plugin: 'java'
+    apply plugin: 'idea'
+    apply plugin: 'com.google.protobuf'
+    apply plugin: 'com.bmuschko.docker-remote-api'
+    apply plugin: 'com.bmuschko.docker-java-application'
 
-// Inform IDEs like IntelliJ IDEA, Eclipse or NetBeans about the generated code.
-sourceSets {
-    main {
-        java {
-            srcDirs 'build/generated/source/proto/main/grpc'
-            srcDirs 'build/generated/source/proto/main/java'
+
+    plugins.withType(JavaPlugin).tap {
+        configureEach {
+            dependencies {
+                implementation project(':')
+            }
         }
     }
 }

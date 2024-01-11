@@ -8,7 +8,7 @@ import java.util.Iterator;
 import java.util.List;
 
 
-
+// TODO implements Storage
 public class LocalStorage {
     private final List<LocalFileRep> fileList;
     private final long largestId;

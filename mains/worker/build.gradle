@@ -1,0 +1,18 @@
+plugins {
+    id 'application'
+}
+
+application {
+    mainClass = 'pl.edu.mimuw.mapreduce.WorkerMain'
+}
+
+docker {
+    javaApplication {
+        baseImage = 'openjdk:17'
+        maintainer = 'Adam Greloch "a.greloch@student.uw.edu.pl"'
+        ports = [9090, 5701]
+        images = ['worker:latest']
+        jvmArgs = ['-Xms256m', '-Xmx2048m']
+    }
+}
+

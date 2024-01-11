@@ -7,4 +7,5 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'edi-mapreduce'
+rootProject.name = 'mapreduce'
+include 'mains:worker'
