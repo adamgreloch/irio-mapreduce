@@ -84,7 +84,6 @@ subprojects {
     apply plugin: 'com.bmuschko.docker-remote-api'
     apply plugin: 'com.bmuschko.docker-java-application'
 
-
     plugins.withType(JavaPlugin).tap {
         configureEach {
             dependencies {
@@ -100,4 +99,12 @@ subprojects {
             }
         }
     }
+}
+
+tasks.register('dockerBuildImages') {
+    description 'Build Docker images for all subprojects'
+    dependsOn ':mains:master:dockerBuildImage'
+    dependsOn ':mains:taskmanager:dockerBuildImage'
+    dependsOn ':mains:batchmanager:dockerBuildImage'
+    dependsOn ':mains:worker:dockerBuildImage'
 }
