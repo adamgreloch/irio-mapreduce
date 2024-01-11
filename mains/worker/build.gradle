@@ -8,11 +8,8 @@ application {
 
 docker {
     javaApplication {
-        baseImage = 'openjdk:17'
-        maintainer = 'Adam Greloch "a.greloch@student.uw.edu.pl"'
-        ports = [9090, 5701]
+        ports = [5042, 4242]
         images = ['worker:latest']
-        jvmArgs = ['-Xms256m', '-Xmx2048m']
     }
 }
 

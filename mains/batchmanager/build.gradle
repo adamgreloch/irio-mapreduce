@@ -1,0 +1,15 @@
+plugins {
+    id 'application'
+}
+
+application {
+    mainClass = 'pl.edu.mimuw.mapreduce.BatchManagerMain'
+}
+
+docker {
+    javaApplication {
+        ports = [5043, 4242]
+        images = ['batchmanager:latest']
+    }
+}
+

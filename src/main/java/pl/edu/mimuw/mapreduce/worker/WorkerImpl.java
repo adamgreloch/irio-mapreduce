@@ -18,7 +18,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.worker");
+    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.workerimpl");
 
     private final Storage storage;
     private final ExecutorService pool;

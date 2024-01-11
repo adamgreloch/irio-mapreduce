@@ -1,0 +1,15 @@
+plugins {
+    id 'application'
+}
+
+application {
+    mainClass = 'pl.edu.mimuw.mapreduce.MasterMain'
+}
+
+docker {
+    javaApplication {
+        ports = [5040, 4242]
+        images = ['master:latest']
+    }
+}
+

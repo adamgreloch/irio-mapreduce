@@ -8,7 +8,7 @@ public class WorkerMain {
     private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.worker");
 
     public static void main(String[] args) throws IOException, InterruptedException {
-        var port = 50042;
+        var port = 5042;
         logger.log(Level.INFO, "Worker starting on port " + port);
         // TODO: wait for working storage impl
         //Storage storage = new LocalStorage();

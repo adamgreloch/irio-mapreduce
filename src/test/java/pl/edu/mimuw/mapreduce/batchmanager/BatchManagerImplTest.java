@@ -7,7 +7,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
-import pl.edu.mimuw.mapreduce.taskmanager.TaskManager;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -18,14 +18,14 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 
 @RunWith(JUnit4.class)
-public class BatchManagerTest {
+public class BatchManagerImplTest {
 
-    public class TaskManagerThread extends Thread {
+    public static class TaskManagerThread extends Thread {
 
         /** Run a TaskManager instance on port 2137. */
         public void run(){
             try {
-                TaskManager.start(2137);
+                TaskManagerImpl.start(2137);
             } catch (Exception e) {
                 System.err.println(e);
             }
@@ -46,7 +46,7 @@ public class BatchManagerTest {
 
         // Create a server, add service, start, and register for automatic graceful shutdown.
         grpcCleanup.register(InProcessServerBuilder
-                .forName(serverName).directExecutor().addService(new BatchManager.BatchManagerImpl()).build().start());
+                .forName(serverName).directExecutor().addService(new BatchManagerImpl()).build().start());
 
         BatchManagerGrpc.BatchManagerBlockingStub blockingStub = BatchManagerGrpc.newBlockingStub(
                 // Create a client channel and register for automatic graceful shutdown.
