@@ -22,9 +22,11 @@ public class Worker {
     private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.worker");
 
     public static void main(String[] args) throws IOException, InterruptedException {
+        var port = 50042;
+        logger.log(Level.INFO, "Worker starting on port " + port);
         // TODO: wait for working storage impl
         //Storage storage = new LocalStorage();
-        //Utils.start_service(new WorkerImpl(storage), 50042);
+        //Utils.start_service(new WorkerImpl(storage), port);
     }
 
     static class WorkerImpl extends WorkerGrpc.WorkerImplBase {

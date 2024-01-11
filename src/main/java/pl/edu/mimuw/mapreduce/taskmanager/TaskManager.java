@@ -27,10 +27,16 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TaskManager {
+    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.taskmanager");
+
     public static void main(String[] args) throws IOException, InterruptedException {
-        //Utils.start_service(new TaskManagerImpl(), 2137);
+        var port = 50043;
+        logger.log(Level.INFO, "Task manager starting on port " + port);
+        //Utils.start_service(new TaskManagerImpl(), port);
     }
 
     public static void start(int port) throws IOException, InterruptedException {

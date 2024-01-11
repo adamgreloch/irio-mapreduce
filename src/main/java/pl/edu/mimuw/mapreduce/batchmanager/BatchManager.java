@@ -25,8 +25,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class BatchManager {
+    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.batchmanager");
 
     enum BatchPhase {
         Mapping,
@@ -34,6 +37,8 @@ public class BatchManager {
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
+        var port = 50043;
+        logger.log(Level.INFO, "Batch manager starting on port " + port);
         Utils.start_service(new BatchManagerImpl(), 50043);
     }
 
