@@ -6,11 +6,16 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import jdk.jshell.execution.Util;
+import org.apache.commons.lang3.tuple.Pair;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
+import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
@@ -40,8 +45,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase {
         };
     }
 
-    @Override
-    public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
+    private Pair<String, Integer> getHostPort() {
         String hostname;
         int port;
 
@@ -52,7 +56,15 @@ public class MasterImpl extends MasterGrpc.MasterImplBase {
             hostname = "localhost";
             port = 2137;
         }
-        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
+
+        return Pair.of(hostname, port);
+    }
+
+    @Override
+    public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
+        var hostPort = getHostPort();
+
+        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
         var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(managedChannel);
 
         ListenableFuture<Response> listenableFuture = batchManagerFutureStub.doBatch(request);
@@ -61,6 +73,12 @@ public class MasterImpl extends MasterGrpc.MasterImplBase {
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        throw new RuntimeException("todo");
+        var hostPort = getHostPort();
+
+        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
+        var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(managedChannel);
+
+        ListenableFuture<PingResponse> listenableFuture = batchManagerFutureStub.healthCheck(request);
+        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.BatchManager), pool);
     }
 }

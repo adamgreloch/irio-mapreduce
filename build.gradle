@@ -35,6 +35,7 @@ allprojects {
             }
 
             dependencies {
+                implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
                 implementation platform('com.google.cloud:libraries-bom:26.29.0')
                 implementation 'com.google.cloud:google-cloud-storage'
 
