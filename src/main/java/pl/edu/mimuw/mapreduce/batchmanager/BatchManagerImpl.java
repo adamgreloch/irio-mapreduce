@@ -35,7 +35,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     private final AtomicInteger taskCount = new AtomicInteger(0);
     private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
     private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private final ExecutorService pool = Executors.newCachedThreadPool();
 
     /**
      * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
@@ -106,7 +106,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
 
                 ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
                 Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub),
-                        executorService);
+                        pool);
             }
 
             /** Stop processing the batch and send error message. */
@@ -132,8 +132,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
             hostname = "localhost";
             port = 2137;
         }
-        ManagedChannel managedChannel =
-                ManagedChannelBuilder.forAddress(hostname, port).executor(executorService).usePlaintext().build();
+        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
         doneTasks.put(batch, 0);
@@ -151,7 +150,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optionalTask.get());
 
         Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub),
-                executorService);
+                pool);
         // Both onNext and onCompleted are called in above function.
     }
 
