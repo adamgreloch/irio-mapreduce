@@ -19,6 +19,8 @@ public interface Storage {
 
     FileRep getFile(Path path);
 
+    Path getDirPath(long dirId);
+
     /** Puts a file with id fileId to a directory dirId */
     void putFile(long dirId, long fileId, File file);
 

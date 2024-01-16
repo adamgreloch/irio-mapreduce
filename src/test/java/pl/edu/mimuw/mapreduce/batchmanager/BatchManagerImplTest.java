@@ -4,9 +4,7 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Rule;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
+import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
@@ -17,7 +15,6 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
-@RunWith(JUnit4.class)
 public class BatchManagerImplTest {
 
     public static class TaskManagerThread extends Thread {
@@ -25,7 +22,7 @@ public class BatchManagerImplTest {
         /** Run a TaskManager instance on port 2137. */
         public void run(){
             try {
-                TaskManagerImpl.start(2137);
+                TaskManagerImpl.start();
             } catch (Exception e) {
                 System.err.println(e);
             }

@@ -6,7 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
-import pl.edu.mimuw.mapreduce.config.NetworkConfig;
+import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -51,7 +51,6 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
                 if (nextTaskNr >= batch.getMapBinIdsCount()) {
                     return Optional.empty();
                 }
-                builder.setTaskType(Task.TaskType.Map).setBeginFromId(0);
                 //TODO set begin from id, by checking storage on whether some maps were already completed for
                 // provided batch.
                 // For example if error occurred and we need to pick up work from other taskManager.
@@ -125,9 +124,9 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         String hostname;
         int port;
 
-        if (NetworkConfig.IS_KUBERNETES) {
-            hostname = NetworkConfig.TASK_MANAGERS_HOST;
-            port = NetworkConfig.TASK_MANAGERS_PORT;
+        if (ClusterConfig.IS_KUBERNETES) {
+            hostname = ClusterConfig.TASK_MANAGERS_HOST;
+            port = ClusterConfig.TASK_MANAGERS_PORT;
         } else {
             hostname = "localhost";
             port = 2137;

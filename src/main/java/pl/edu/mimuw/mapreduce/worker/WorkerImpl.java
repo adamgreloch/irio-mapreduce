@@ -2,20 +2,22 @@ package pl.edu.mimuw.mapreduce.worker;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.storage.Storage;
-import pl.edu.mimuw.mapreduce.worker.util.Combiner;
-import pl.edu.mimuw.mapreduce.worker.util.ConcurrentProcessor;
+import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
-import pl.edu.mimuw.proto.worker.DoCombineRequest;
-import pl.edu.mimuw.proto.worker.DoWorkRequest;
+import pl.edu.mimuw.proto.worker.DoMapRequest;
+import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
+import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
+import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
     private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.workerimpl");
@@ -29,8 +31,8 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
     }
 
     @Override
-    public void doWork(DoWorkRequest request, StreamObserver<Response> responseObserver) {
-        pool.execute(new DoWorkHandler(request, responseObserver));
+    public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
+        pool.execute(new DoMapHandler(request, responseObserver));
     }
 
     @Override
@@ -39,15 +41,15 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
     }
 
     @Override
-    public void doCombine(DoCombineRequest request, StreamObserver<Response> responseObserver) {
-        pool.execute(new DoCombineHandler(request, responseObserver));
+    public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
+        pool.execute(new DoReduceHandler(request, responseObserver));
     }
 
-    class DoWorkHandler implements Runnable {
-        private final DoWorkRequest request;
+    class DoMapHandler implements Runnable {
+        private final DoMapRequest request;
         private final StreamObserver<Response> responseObserver;
 
-        DoWorkHandler(DoWorkRequest request, StreamObserver<Response> responseObserver) {
+        DoMapHandler(DoMapRequest request, StreamObserver<Response> responseObserver) {
             this.request = request;
             this.responseObserver = responseObserver;
         }
@@ -57,46 +59,64 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
             var task = request.getTask();
 
             StatusCode statusCode;
+            String message = "";
 
-            try (var processor = new ConcurrentProcessor(storage, split, task.getTaskBinIdsList(),
-                    task.getDataDirId(), task.getDestinationId())) {
-                switch (task.getTaskType()) {
-                    case Map -> processor.map();
-                    case Reduce -> processor.reduce();
-                    case UNRECOGNIZED -> throw new RuntimeException("unrecognized task type");
-                }
+            try (var processor = new ConcurrentMapProcessor(storage, split, task.getTaskBinIdsList(),
+                    task.getInputDirId(), task.getDestDirId())) {
+
+                logger.log(Level.FINE, "performing map");
+
+                if (task.getTaskType() != Map)
+                    throw new RuntimeException("bad task type");
+
+                processor.map();
+
                 statusCode = StatusCode.Ok;
             } catch (Exception e) {
                 statusCode = StatusCode.Err;
+                message = e.toString();
                 logger.log(Level.WARNING, "processing failed: ", e);
             }
 
-            var response = Response.newBuilder().setStatusCode(statusCode).build();
+            var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         }
     }
 
-    class DoCombineHandler implements Runnable {
-        private final DoCombineRequest request;
+    static class DoReduceHandler implements Runnable {
+        private final DoReduceRequest request;
         private final StreamObserver<Response> responseObserver;
 
-        DoCombineHandler(DoCombineRequest request, StreamObserver<Response> responseObserver) {
+        DoReduceHandler(DoReduceRequest request, StreamObserver<Response> responseObserver) {
             this.request = request;
             this.responseObserver = responseObserver;
         }
 
         public void run() {
-            var split1 = request.getSplit1();
-            var split2 = request.getSplit2();
-            var binary = storage.getFile(Storage.BINARY_DIR, request.getCombineBinId()).file();
-            var combiner = new Combiner(storage, request.getDestDirId(), request.getInputDirId(), binary);
+            var file = request.getFileId();
+            var task = request.getTask();
 
-            StatusCode statusCode = StatusCode.Ok;
+            StatusCode statusCode;
+            String message = "";
 
-            combiner.combine(split1, split2);
+            try {
+                if (task.getTaskType() != Reduce)
+                    throw new RuntimeException("bad task type");
 
-            var response = Response.newBuilder().setStatusCode(statusCode).build();
+                logger.log(Level.FINE, "performing reduce");
+
+                // TODO perform reduce
+                logger.log(Level.WARNING, "reducing todo");
+
+                statusCode = StatusCode.Ok;
+            } catch (Exception e) {
+                statusCode = StatusCode.Err;
+                message = e.toString();
+                logger.log(Level.WARNING, "processing failed: ", e);
+            }
+
+            var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();
             responseObserver.onNext(response);
             responseObserver.onCompleted();
         }
