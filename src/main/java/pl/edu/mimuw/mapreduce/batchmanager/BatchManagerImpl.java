@@ -6,15 +6,13 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
-import org.apache.commons.lang3.tuple.Pair;
 import pl.edu.mimuw.mapreduce.Utils;
-import pl.edu.mimuw.mapreduce.config.NetworkConfig;
+import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
-import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -39,6 +37,9 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
     private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
     private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final ManagedChannel taskManagerChannel =
+            ManagedChannelBuilder.forAddress(ClusterConfig.TASK_MANAGERS_HOST,
+            ClusterConfig.TASK_MANAGERS_PORT).executor(pool).usePlaintext().build();
 
     /**
      * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
@@ -54,7 +55,6 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
                 if (nextTaskNr >= batch.getMapBinIdsCount()) {
                     return Optional.empty();
                 }
-                builder.setTaskType(Task.TaskType.Map).setBeginFromId(0);
                 //TODO set begin from id, by checking storage on whether some maps were already completed for
                 // provided batch.
                 // For example if error occurred and we need to pick up work from other taskManager.
@@ -123,27 +123,9 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         };
     }
 
-    private Pair<String, Integer> getHostPort() {
-        String hostname;
-        int port;
-
-        if (NetworkConfig.IS_KUBERNETES) {
-            hostname = NetworkConfig.TASK_MANAGERS_HOST;
-            port = NetworkConfig.TASK_MANAGERS_PORT;
-        } else {
-            hostname = "localhost";
-            port = 2137;
-        }
-
-        return Pair.of(hostname, port);
-    }
-
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
-        var hostPort = getHostPort();
-
-        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         doneTasks.put(batch, 0);
         batchPhases.put(batch, BatchPhase.Mapping);
@@ -166,12 +148,10 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        var hostPort = getHostPort();
-
-        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         var listenableFuture = taskManagerFutureStub.healthCheck(request);
-        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.TaskManager), pool);
+        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
+                MissingConnectionWithLayer.TaskManager), pool);
     }
 }

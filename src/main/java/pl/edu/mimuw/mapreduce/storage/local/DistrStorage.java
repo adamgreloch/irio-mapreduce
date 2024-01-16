@@ -6,9 +6,9 @@ import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -50,6 +50,11 @@ public class DistrStorage implements Storage {
     }
 
     @Override
+    public Path getDirPath(long dirId) {
+        return storagePath.resolve(String.valueOf(dirId));
+    }
+
+    @Override
     public void putFile(long dirId, long fileId, File file) {
         try {
             Files.move(file.toPath(), Paths.get((storagePath.resolve(String.valueOf(dirId))).resolve(String.valueOf(fileId)).toString()), ATOMIC_MOVE);
@@ -61,7 +66,6 @@ public class DistrStorage implements Storage {
     @Override
     public long getFileCount(long dirId) {
         long length = 0;
-        File directory = new File(String.valueOf(dirId));
         try (Stream<Path> files = Files.list(Paths.get(String.valueOf(dirId)))) {
             length = files.count();
         } catch (Exception e) {

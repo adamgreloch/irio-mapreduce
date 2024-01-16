@@ -13,23 +13,25 @@ option java_multiple_files = true;
 
 message Batch {
   repeated int64 map_bin_ids = 1; // binary IDs of map tasks
-  repeated int64 reduce_bin_ids = 2; // binary IDs of reduce tasks
-  uint64 input_id = 3; // ID of range of data to batch-process
+  int64 partition_bin_id = 2; // binary IDs of partitioner
+  repeated int64 reduce_bin_ids = 3; // binary IDs of reduce tasks
+  uint64 input_id = 4; // ID of range of data to batch-process
 }
 
 message Task {
+  uint64 task_id = 1; // ID of a map/reduce task assigned by task manager
   enum TaskType {
     Map = 0;
     Reduce = 1;
   }
-  uint64 task_id = 1; // ID of a map/reduce task assigned by task manager
   TaskType task_type = 2;
-  uint64 begin_from_id = 3; // ID of a map/reduce task assigned by task manager
-  uint64 data_dir_id = 4; // directory ID of input data
-  uint64 destination_id = 5; // processed files should be put to a location with this ID
-  // In case of map task, many binary IDs of map tasks.
-  // In case of reduce, first bin_id is a reduce task binary, second is a combine task binary.
-  repeated uint64 task_bin_ids = 6;
+
+  uint64 input_dir_id = 3; // directory ID of input data
+  uint64 dest_dir_id = 4; // processed files should be put to a location with this ID
+
+  // Binary IDs of map tasks and a partition binary at the end.
+  // OR one binary ID of reduce task
+  repeated uint64 task_bin_ids = 5;
 }
 
 message Split {
@@ -47,7 +49,6 @@ enum ProcessType {
   BATCH_MANAGER = 1;
   TASK_MANAGER = 2;
   WORKER = 3;
-  SYS_MANAGER = 4;
 }
 
 /* Service responds with a Response message after processing the request */

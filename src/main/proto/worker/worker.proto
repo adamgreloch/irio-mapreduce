@@ -10,25 +10,20 @@ import "healthcheck/healthcheck.proto";
 
 // Service capable of applying a sequence of map operations or one reduce on a range of files (called split).
 service Worker {
-  // Apply all transformations specified in DoWorkRequest.task.
-  // This is either a sequence of map operations or one reduce transformation.
-  rpc DoWork(DoWorkRequest) returns (common.Response) {}
+  rpc DoMap(DoMapRequest) returns (common.Response) {}
 
-  // Combines results from two adjacent splits into one file
-  rpc DoCombine(DoCombineRequest) returns (common.Response) {}
+  rpc DoReduce(DoReduceRequest) returns (common.Response) {}
+
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {} // probably not needed
 }
 
-message DoWorkRequest {
+message DoMapRequest {
   common.Task task = 1;
-  common.Split split = 2;
+  common.Split split = 2; // directory split on which the map task is performed
 }
 
-// Output file_id should match split1.beg
-message DoCombineRequest {
-  uint64 combine_bin_id = 1;
-  uint64 input_dir_id = 2;
-  uint64 dest_dir_id = 3;
-  common.Split split1 = 4;
-  common.Split split2 = 5;
+message DoReduceRequest {
+  common.Task task = 1;
+  uint64 file_id = 2;     // id of file to reduce
 }
+
