@@ -3,6 +3,7 @@ package pl.edu.mimuw.mapreduce.storage;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 
@@ -16,6 +17,8 @@ public interface Storage {
     /** Retrieves a file with id fileId from a directory dirId */
     FileRep getFile(long dirId, long fileId);
 
+    FileRep getFile(Path path);
+
     /** Puts a file with id fileId to a directory dirId */
     void putFile(long dirId, long fileId, File file);
 
@@ -26,8 +29,8 @@ public interface Storage {
     List<Split> getSplitsForDir(long dirId, int splits);
 
     /** Gets an iterator over files from a split of directory dirId */
-    Iterator<FileRep> getSplitIterator(long dirId, Split split);
+    Iterator<Path> getSplitIterator(long dirId, Split split);
 
      /** Gets an iterator over all files in a directory dirId */
-    Iterator<FileRep> getDirIterator(long dirId);
+    Iterator<Path> getDirIterator(long dirId);
 }
