@@ -8,6 +8,7 @@ import pl.edu.mimuw.proto.common.Split;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -35,9 +36,9 @@ public class ConcurrentProcessor implements AutoCloseable {
 
     public void map() throws ExecutionException, InterruptedException {
         ArrayList<Future<Void>> futures = new ArrayList<>();
-        for (Iterator<FileRep> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
-            FileRep fr = it.next();
-            futures.add(pool.submit(new FileProcessor(fr, binaries.size())));
+        for (Iterator<Path> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
+            Path path = it.next();
+            futures.add(pool.submit(new FileProcessor(storage.getFile(path), binaries.size())));
         }
         for (var future : futures)
             future.get();
@@ -46,9 +47,9 @@ public class ConcurrentProcessor implements AutoCloseable {
     public void reduce() throws ExecutionException, InterruptedException {
         ArrayList<Future<Void>> futures = new ArrayList<>();
         // Reduce phase
-        for (Iterator<FileRep> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
-            FileRep fr = it.next();
-            futures.add(pool.submit(new FileProcessor(fr, 1)));
+        for (Iterator<Path> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
+            Path path = it.next();
+            futures.add(pool.submit(new FileProcessor(storage.getFile(path), 1)));
         }
         for (var future : futures)
             future.get();

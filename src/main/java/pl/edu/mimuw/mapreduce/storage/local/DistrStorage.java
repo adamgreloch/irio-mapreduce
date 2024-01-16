@@ -19,9 +19,21 @@ import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 
 /* NOTE: We assume that the argument-directories already exist */
 public class DistrStorage implements Storage {
+    private final Path storagePath;
+
+    public DistrStorage(String storagePathString) {
+        this.storagePath = Paths.get(storagePathString);
+    }
+
+    public Path getStoragePath() {
+        return storagePath;
+    }
+
     @Override
     public FileRep getFile(long dirId, long fileId) {
-        File file = new File(String.valueOf(dirId) + "/" + String.valueOf(fileId));
+        Path dirPath = storagePath.resolve(String.valueOf(dirId));
+        Path filePath = dirPath.resolve(String.valueOf(fileId));
+        File file = new File(filePath.toString());
         if (!file.exists()) {
             throw new IllegalStateException("File does not exist");
         }
@@ -29,9 +41,18 @@ public class DistrStorage implements Storage {
     }
 
     @Override
+    public FileRep getFile(Path path) {
+        File file = new File(path.toString());
+        if (!file.exists()) {
+            throw new IllegalStateException("File does not exist");
+        }
+        return new LocalFileRep(file, Long.parseLong(path.getFileName().toString()));
+    }
+
+    @Override
     public void putFile(long dirId, long fileId, File file) {
         try {
-            Files.move(file.toPath(), Paths.get(String.valueOf(dirId) + "/" + String.valueOf(fileId)), ATOMIC_MOVE);
+            Files.move(file.toPath(), Paths.get((storagePath.resolve(String.valueOf(dirId))).resolve(String.valueOf(fileId)).toString()), ATOMIC_MOVE);
         } catch (Exception e) {
             throw new IllegalStateException("Cannot move file atomically");
         }
@@ -68,23 +89,23 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public Iterator<FileRep> getSplitIterator(long dirId, Split split) {
-        return new Iterator<FileRep>() {
+    public Iterator<Path> getSplitIterator(long dirId, Split split) {
+        return new Iterator<Path>() {
             private long current = split.getBeg();
 
             @Override
             public boolean hasNext() {return current <= split.getEnd();} // NOTE: end bound is inclusive
 
             @Override
-            public FileRep next() {
-                return getFile(dirId, current++);
+            public Path next() {
+                return storagePath.resolve(String.valueOf(dirId)).resolve(String.valueOf(current++));
             }
         };
     }
 
     @Override
-    public Iterator<FileRep> getDirIterator(long dirId) {
-        return new Iterator<FileRep>() {
+    public Iterator<Path> getDirIterator(long dirId) {
+        return new Iterator<Path>() {
             private long current = 0;
 
             @Override
@@ -93,8 +114,8 @@ public class DistrStorage implements Storage {
             }
 
             @Override
-            public FileRep next() {
-                return getFile(dirId, current++);
+            public Path next() {
+                return storagePath.resolve(String.valueOf(dirId)).resolve(String.valueOf(current++));
             }
         };
     }

@@ -8,6 +8,7 @@ import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Iterator;
 import java.util.List;
@@ -16,10 +17,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DistrStorageTest {
 
-    File[] createFiles(int howMany, long inWhichDir) {
+    File createFile(long dirId, long fileId, Path storagePath) {
+        Path dirPath = storagePath.resolve(String.valueOf(dirId));
+        Path filePath = dirPath.resolve(String.valueOf(fileId));
+        return new File(filePath.toString());
+    }
+
+    File[] createFiles(int howMany, long inWhichDir, Path storagePath) {
         File[] files = new File[howMany];
         for (int i = 0; i < howMany; i++) {
-            File file = new File(inWhichDir + "/" + i);
+            File file = createFile(inWhichDir, i, storagePath);
             try {
                 Files.write(file.toPath(), "Some file content".getBytes(), StandardOpenOption.CREATE);
                 files[i] = file;
@@ -39,7 +46,7 @@ class DistrStorageTest {
     @Test
     @DisplayName("getFile() should throw IllegalStateException when file does not exist")
     void getFile() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         long fileId = 1;
 
@@ -49,7 +56,7 @@ class DistrStorageTest {
     @Test
     @DisplayName("getFile() should return the file when it exists")
     void getFile2() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         long fileId = 1;
         File dir = new File("1");
@@ -75,7 +82,7 @@ class DistrStorageTest {
     @Test
     @DisplayName("putFile() should copy the content of the temporary file to the storage")
     void putFile() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         long fileId = 1;
 
@@ -112,7 +119,7 @@ class DistrStorageTest {
 
     @Test
     void getFileCountEmpty() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         File dir = new File("1");
         dir.mkdir();
@@ -125,7 +132,7 @@ class DistrStorageTest {
     @Test
     @DisplayName("getFileCount() should return the number of files in the directory")
     void getFileCount() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
 
         // create folder of name "1"
@@ -133,7 +140,7 @@ class DistrStorageTest {
         dir.mkdir();
 
         try {
-            File[] files = createFiles(3, dirId);
+            File[] files = createFiles(3, dirId, storage.getStoragePath());
 
             // Call getFileCount method to get the number of files in the directory
             long fileCount = storage.getFileCount(dirId);
@@ -151,13 +158,13 @@ class DistrStorageTest {
 
     @Test
     void getSplitsForDir() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         int splits = 3;
 
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(10, dirId);
+        File[] files = createFiles(10, dirId, storage.getStoragePath());
 
         List<Split> splitList = storage.getSplitsForDir(dirId, splits);
         assertEquals(splits, splitList.size());
@@ -174,21 +181,21 @@ class DistrStorageTest {
 
     @Test
     void getSplitIterator() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         long beg = 0;
         long end = 10;
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(20, dirId); // create more files than split iterator has
+        File[] files = createFiles(20, dirId, storage.getStoragePath()); // create more files than split iterator has
         Split split = new SplitBuilder(beg, end).build();
 
-        Iterator<FileRep> iterator = storage.getSplitIterator(dirId, split);
+        Iterator<Path> iterator = storage.getSplitIterator(dirId, split);
         for (int i = 0; i <= 10; i++) {
             assertTrue(iterator.hasNext());
-            FileRep fileRep = iterator.next();
-            assertNotNull(fileRep);
-            assertEquals(i, fileRep.id());
+            Path filePath = iterator.next();
+            assertNotNull(filePath);
+            assertEquals(String.valueOf(i), filePath.getFileName().toString());
         }
 
         assertFalse(iterator.hasNext());
@@ -198,19 +205,19 @@ class DistrStorageTest {
 
     @Test
     void getDirIterator() {
-        DistrStorage storage = new DistrStorage();
+        DistrStorage storage = new DistrStorage("./");
         long dirId = 1;
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(20, dirId);
+        File[] files = createFiles(20, dirId, storage.getStoragePath());
 
-        Iterator<FileRep> iterator = storage.getDirIterator(dirId);
+        Iterator<Path> iterator = storage.getDirIterator(dirId);
         assertNotNull(iterator);
         for (int i = 0; i < 20; i++) {
             assertTrue(iterator.hasNext());
-            FileRep fileRep = iterator.next();
+            Path fileRep = iterator.next();
             assertNotNull(fileRep);
-            assertEquals(i, fileRep.id());
+            assertEquals(String.valueOf(i), fileRep.getFileName().toString());
         }
 
         assertFalse(iterator.hasNext());
