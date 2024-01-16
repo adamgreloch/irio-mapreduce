@@ -5,12 +5,15 @@ import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import org.apache.commons.lang3.tuple.Pair;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
@@ -67,6 +70,21 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         };
     }
 
+    private Pair<String, Integer> getHostPort() {
+        String hostname;
+        int port;
+
+        if (NetworkConfig.IS_KUBERNETES) {
+            hostname = NetworkConfig.WORKERS_HOST;
+            port = NetworkConfig.WORKERS_PORT;
+        } else {
+            hostname = "localhost";
+            port = 2122;
+        }
+
+        return Pair.of(hostname, port);
+    }
+
     @Override
     public void doTask(Task task, StreamObserver<Response> responseObserver) {
         pool.execute(new Handler(task, responseObserver));
@@ -74,7 +92,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        throw new RuntimeException("todo");
+        var hostPort = getHostPort();
+
+        var managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
+        var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
+
+        var listenableFuture = workerFutureStub.healthCheck(request);
+        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.Worker), pool);
+
     }
 
     class Handler implements Runnable {
@@ -97,22 +122,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         }
 
         public void run() {
-            String hostname;
-            int port;
+            var hostPort = getHostPort();
 
-            if (NetworkConfig.IS_KUBERNETES) {
-                hostname = NetworkConfig.WORKERS_HOST;
-                port = NetworkConfig.WORKERS_PORT;
-            } else {
-                hostname = "localhost";
-                port = 2122;
-            }
 
             var splits = storage.getSplitsForDir(task.getDataDirId(), splitsNum);
 
             for (var split : splits) {
                 var managedChannel =
-                        ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
+                        ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
                 var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
 
                 var doWorkRequest = DoWorkRequest.newBuilder().setTask(task).setSplit(split).build();
@@ -147,7 +164,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
                             var s2 = splitQueue.poll();
 
                             var managedChannel =
-                                    ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
+                                    ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
                             var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
 
                             assert s1 != null;

@@ -1,8 +1,13 @@
 package pl.edu.mimuw.mapreduce;
 
+import com.google.common.util.concurrent.FutureCallback;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
+import io.grpc.stub.StreamObserver;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
+import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
+import pl.edu.mimuw.proto.healthcheck.PingResponse;
 
 import java.io.IOException;
 
@@ -45,5 +50,26 @@ public class Utils {
             log += 2;
         }
         return log + (bits >>> 1);
+    }
+
+    public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver,
+                                                                  MissingConnectionWithLayer connectingTo) {
+        return new FutureCallback<PingResponse>() {
+            @Override
+            public void onSuccess(PingResponse result) {
+                responseObserver.onNext(result);
+                responseObserver.onCompleted();
+            }
+
+            @Override
+            public void onFailure(Throwable t) {
+                PingResponse pingResponse = PingResponse.newBuilder()
+                        .setStatusCode(HealthStatusCode.Error)
+                        .setMissingLayer(MissingConnectionWithLayer.BatchManager)
+                        .build();
+                responseObserver.onNext(pingResponse);
+                responseObserver.onCompleted();
+            }
+        };
     }
 }

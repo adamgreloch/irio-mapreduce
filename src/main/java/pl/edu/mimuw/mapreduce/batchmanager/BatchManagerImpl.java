@@ -6,6 +6,8 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
+import org.apache.commons.lang3.tuple.Pair;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.NetworkConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
@@ -13,6 +15,7 @@ import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
+import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
@@ -35,7 +38,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     private final AtomicInteger taskCount = new AtomicInteger(0);
     private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();
     private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
-    private final ExecutorService executorService = Executors.newCachedThreadPool();
+    private final ExecutorService pool = Executors.newCachedThreadPool();
 
     /**
      * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.
@@ -106,7 +109,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
 
                 ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
                 Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub),
-                        executorService);
+                        pool);
             }
 
             /** Stop processing the batch and send error message. */
@@ -120,8 +123,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         };
     }
 
-    @Override
-    public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+    private Pair<String, Integer> getHostPort() {
         String hostname;
         int port;
 
@@ -132,8 +134,15 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
             hostname = "localhost";
             port = 2137;
         }
-        ManagedChannel managedChannel =
-                ManagedChannelBuilder.forAddress(hostname, port).executor(executorService).usePlaintext().build();
+
+        return Pair.of(hostname, port);
+    }
+
+    @Override
+    public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+        var hostPort = getHostPort();
+
+        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
 
         doneTasks.put(batch, 0);
@@ -151,15 +160,18 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optionalTask.get());
 
         Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub),
-                executorService);
+                pool);
         // Both onNext and onCompleted are called in above function.
     }
 
-    // TODO: propagate errors from lower layers
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
-        responseObserver.onNext(pingResponse);
-        responseObserver.onCompleted();
+        var hostPort = getHostPort();
+
+        ManagedChannel managedChannel = ManagedChannelBuilder.forAddress(hostPort.getLeft(), hostPort.getRight()).executor(pool).usePlaintext().build();
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(managedChannel);
+
+        var listenableFuture = taskManagerFutureStub.healthCheck(request);
+        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.TaskManager), pool);
     }
 }

@@ -8,4 +8,7 @@ public class NetworkConfig {
 
     public static final String TASK_MANAGERS_HOST = System.getenv("TASKMGR_SERVICE_HOST");
     public static final int TASK_MANAGERS_PORT = Integer.parseInt(System.getenv("TASKMGR_SERVICE_PORT"));
+
+    public static final String BATCH_MANAGERS_HOST = System.getenv("BATCHMGR_SERVICE_HOST");
+    public static final int BATCH_MANAGERS_PORT = Integer.parseInt(System.getenv("BATCHMGR_SERVICE_PORT"));
 }
