@@ -10,9 +10,16 @@ enum HealthStatusCode {
   Error = 1;
 }
 
+enum MissingConnectionWithLayer{
+  BatchManager = 0;
+  TaskManager = 1;
+  Worker = 2;
+}
+
 message Ping {
 }
 
 message PingResponse {
   HealthStatusCode status_code = 3;
+  MissingConnectionWithLayer missing_layer = 4;
 }

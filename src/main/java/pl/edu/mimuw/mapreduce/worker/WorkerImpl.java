@@ -5,6 +5,7 @@ import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.worker.DoMapRequest;
@@ -37,7 +38,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        throw new RuntimeException("todo");
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
+        responseObserver.onNext(pingResponse);
+        responseObserver.onCompleted();
     }
 
     @Override

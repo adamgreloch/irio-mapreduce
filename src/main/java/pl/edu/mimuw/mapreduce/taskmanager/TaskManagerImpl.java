@@ -1,6 +1,8 @@
 package pl.edu.mimuw.mapreduce.taskmanager;
 
 import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
@@ -11,6 +13,7 @@ import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
@@ -37,6 +40,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
 
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final ManagedChannel workerChannel =
+            ManagedChannelBuilder.forAddress(ClusterConfig.WORKERS_HOST,
+            ClusterConfig.WORKERS_PORT).executor(pool).usePlaintext().build();
 
     public TaskManagerImpl(Storage storage) {
         this.storage = storage;
@@ -73,7 +79,12 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        throw new RuntimeException("todo");
+        var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+
+        var listenableFuture = workerFutureStub.healthCheck(request);
+        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
+                MissingConnectionWithLayer.Worker), pool);
+
     }
 
     class Handler implements Runnable {
@@ -96,29 +107,19 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         }
 
         public void run() {
-            String hostname;
-            int port;
-
-            if (ClusterConfig.IS_KUBERNETES) {
-                hostname = ClusterConfig.WORKERS_HOST;
-                port = ClusterConfig.WORKERS_PORT;
-            } else {
-                hostname = "localhost";
-                port = 2122;
-            }
-
             var splits = storage.getSplitsForDir(task.getInputDirId(), splitsNum);
 
             for (var split : splits) {
-                var managedChannel =
-                        ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
-                var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
+                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
                 // TODO: send doMap/doReduce requests
-//                var doWorkRequest = DoWorkRequest.newBuilder().setTask(task).setSplit(split).build();
+//                var doWorkRequest = DoWorkRequest.newBuilder().setTask(task).setSplit(split)
+//                .build();
 //
-//                ListenableFuture<Response> listenableFuture = workerFutureStub.doWork(doWorkRequest);
-//                Futures.addCallback(listenableFuture, createWorkerResponseCallback(task, responseObserver,
+//                ListenableFuture<Response> listenableFuture = workerFutureStub.doWork
+//                (doWorkRequest);
+//                Futures.addCallback(listenableFuture, createWorkerResponseCallback(task,
+//                responseObserver,
 //                        workerFutureStub, operationsDoneLatch), pool);
             }
 
@@ -149,15 +150,19 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
                             var s2 = splitQueue.poll();
 
                             var managedChannel =
-                                    ManagedChannelBuilder.forAddress(hostname, port).executor(pool).usePlaintext().build();
+                                    ManagedChannelBuilder.forAddress(ClusterConfig.WORKERS_HOST,
+                                            ClusterConfig.WORKERS_PORT).executor(pool).usePlaintext().build();
                             var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
 
                             assert s1 != null;
                             assert s2 != null;
 //                            var combineRequest =
-//                                    DoCombineRequest.newBuilder().setCombineBinId(task.getTaskBinIds(1)).setDestDirId(task.getDataDirId()).setSplit1(s1.build()).setSplit2(s2.build()).build();
+//                                    DoCombineRequest.newBuilder().setCombineBinId(task
+//                                    .getTaskBinIds(1)).setDestDirId(task.getDataDirId())
+//                                    .setSplit1(s1.build()).setSplit2(s2.build()).build();
 //
-//                            ListenableFuture<Response> listenableFuture = workerFutureStub.doCombine(combineRequest);
+//                            ListenableFuture<Response> listenableFuture = workerFutureStub
+//                            .doCombine(combineRequest);
 //                            futures.add(listenableFuture);
 
                             splitQueue.add(SplitBuilder.merge(s1, s2));
@@ -171,7 +176,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
 
                 response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
             } catch (Exception e) {
-                response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
+                response =
+                        Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
             }
 
             responseObserver.onNext(response);
