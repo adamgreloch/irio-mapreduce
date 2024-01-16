@@ -35,9 +35,9 @@ allprojects {
             }
 
             dependencies {
+                testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.1'
+                testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.1'
                 implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
-                implementation platform('com.google.cloud:libraries-bom:26.29.0')
-                implementation 'com.google.cloud:google-cloud-storage'
 
                 implementation "io.grpc:grpc-protobuf:${grpcVersion}"
                 implementation "io.grpc:grpc-services:${grpcVersion}"
@@ -108,4 +108,8 @@ tasks.register('dockerBuildImages') {
     dependsOn ':mains:taskmanager:dockerBuildImage'
     dependsOn ':mains:batchmanager:dockerBuildImage'
     dependsOn ':mains:worker:dockerBuildImage'
+}
+
+test {
+    useJUnitPlatform()
 }
