@@ -1,15 +1,18 @@
 package pl.edu.mimuw.mapreduce;
 
+import pl.edu.mimuw.mapreduce.config.ClusterConfig;
+import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
+
 import java.io.IOException;
 import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class TaskManagerMain {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.taskmanager");
-
     public static void main(String[] args) throws IOException, InterruptedException {
-        var port = 5044;
-        logger.log(Level.INFO, "Task manager starting on port " + port);
-        //Utils.start_service(new TaskManagerImpl(), port);
+        Utils.LOGGER.log(Level.INFO, "Hello from TaskManager!");
+
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
+        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_URI);
     }
 }

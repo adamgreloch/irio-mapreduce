@@ -28,21 +28,17 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.logging.Logger;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.taskmanager");
-
     public static void start() throws IOException, InterruptedException {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
-        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_PORT);
+        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_URI);
     }
 
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel workerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.WORKERS_HOST,
-            ClusterConfig.WORKERS_PORT).executor(pool).usePlaintext().build();
+            ManagedChannelBuilder.forTarget(ClusterConfig.WORKERS_URI).executor(pool).usePlaintext().build();
 
     public TaskManagerImpl(Storage storage) {
         this.storage = storage;
@@ -149,10 +145,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
                             var s1 = splitQueue.poll();
                             var s2 = splitQueue.poll();
 
-                            var managedChannel =
-                                    ManagedChannelBuilder.forAddress(ClusterConfig.WORKERS_HOST,
-                                            ClusterConfig.WORKERS_PORT).executor(pool).usePlaintext().build();
-                            var workerFutureStub = WorkerGrpc.newFutureStub(managedChannel);
+                            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
                             assert s1 != null;
                             assert s2 != null;
