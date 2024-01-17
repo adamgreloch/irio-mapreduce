@@ -160,28 +160,28 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
             List<Integer> fileIDs = new ArrayList<>();
 
             //assert if dirbatch is not empty
-            for(int i = 0; i < R_COUNT; i++){
-                File mergedFile = storage.getFile(dirBatch.get(0),i).file();
+            for (int i = 0; i < R_COUNT; i++) {
+                File mergedFile = storage.getFile(dirBatch.get(0), i).file();
 
                 //TODO wyabstrachować to do funkcji
                 OutputStream outputStream = null;
-                try{
+                try {
                     outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true));
                     for (int j = 1; j < dirBatch.size(); j++) {
                         InputStream inputStream = null;
-                        try{
-                            File file = storage.getFile(dirBatch.get(j),i).file();
+                        try {
+                            File file = storage.getFile(dirBatch.get(j), i).file();
                             inputStream = new BufferedInputStream(new FileInputStream(file));
                             IOUtils.copy(inputStream, outputStream);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
-                        }finally {
+                        } finally {
                             IOUtils.closeQuietly(inputStream);
                         }
                     }
                 } catch (FileNotFoundException e) {
                     throw new RuntimeException(e);
-                }finally {
+                } finally {
                     IOUtils.closeQuietly(outputStream);
                 }
                 //Nie powinno być kolizji id bo jesteśmy jedynimi którzy wkładają do tego konkretnego dest.
