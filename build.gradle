@@ -93,6 +93,9 @@ subprojects {
             }
 
             docker {
+                registryCredentials {
+                    url = 'us-central1-docker.pkg.dev'
+                }
                 javaApplication {
                     baseImage = 'openjdk:17'
                     maintainer = 'Adam Greloch "a.greloch@student.uw.edu.pl"'

@@ -4,10 +4,10 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import org.apache.commons.io.IOUtils;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
@@ -27,22 +27,21 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.logging.Level;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Logger;
 
-public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.taskmanager");
-
+public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     public static void start() throws IOException, InterruptedException {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
-        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_PORT);
+        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_URI);
     }
 
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel workerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.WORKERS_HOST,
-                    ClusterConfig.WORKERS_PORT).executor(pool).usePlaintext().build();
+            Utils.createCustomManagedChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
 
     public TaskManagerImpl(Storage storage) {
         this.storage = storage;
@@ -83,6 +82,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
                 MissingConnectionWithLayer.Worker), pool);
 
+    }
+
+    @Override
+    public void internalHealthcheck() {
+        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
     }
 
     class Handler implements Runnable {

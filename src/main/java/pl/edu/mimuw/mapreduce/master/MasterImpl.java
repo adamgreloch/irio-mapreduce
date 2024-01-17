@@ -4,9 +4,9 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -19,14 +19,11 @@ import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Logger;
+import java.util.logging.Level;
 
-public class MasterImpl extends MasterGrpc.MasterImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.master");
+public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel taskManagerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.TASK_MANAGERS_HOST,
-                    ClusterConfig.TASK_MANAGERS_PORT).executor(pool).usePlaintext().build();
+    private final ManagedChannel batchManagerChannel = Utils.createCustomManagedChannelBuilder(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {
@@ -52,6 +49,11 @@ public class MasterImpl extends MasterGrpc.MasterImplBase {
 
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
         Futures.addCallback(listenableFuture, createCallback(responseObserver), pool);
+    }
+
+    @Override
+    public void internalHealthcheck() {
+        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
     }
 
     @Override
