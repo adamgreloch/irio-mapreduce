@@ -2,6 +2,7 @@ package pl.edu.mimuw.mapreduce.worker;
 
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
 import pl.edu.mimuw.proto.common.Response;
@@ -20,10 +21,7 @@ import java.util.logging.Level;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
-import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
-import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
-
-public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
+public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheckable {
     private final Storage storage;
     private final ExecutorService pool;
 
@@ -49,6 +47,11 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
         pool.execute(new DoReduceHandler(request, responseObserver));
     }
 
+    @Override
+    public void internalHealthcheck() {
+        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+    }
+
     class DoMapHandler implements Runnable {
         private final DoMapRequest request;
         private final StreamObserver<Response> responseObserver;
@@ -70,8 +73,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
 
                 Utils.LOGGER.log(Level.FINE, "performing map");
 
-                if (task.getTaskType() != Map)
-                    throw new RuntimeException("bad task type");
+                if (task.getTaskType() != Map) throw new RuntimeException("bad task type");
 
                 processor.map();
 
@@ -105,8 +107,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
             String message = "";
 
             try {
-                if (task.getTaskType() != Reduce)
-                    throw new RuntimeException("bad task type");
+                if (task.getTaskType() != Reduce) throw new RuntimeException("bad task type");
 
                 Utils.LOGGER.log(Level.FINE, "performing reduce");
 

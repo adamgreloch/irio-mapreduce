@@ -3,9 +3,9 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -28,8 +28,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.logging.Level;
 
-public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
+public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     public static void start() throws IOException, InterruptedException {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_URI);
@@ -38,7 +39,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel workerChannel =
-            ManagedChannelBuilder.forTarget(ClusterConfig.WORKERS_URI).executor(pool).usePlaintext().build();
+            Utils.createCustomManagedChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
 
     public TaskManagerImpl(Storage storage) {
         this.storage = storage;
@@ -81,6 +82,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
         Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
                 MissingConnectionWithLayer.Worker), pool);
 
+    }
+
+    @Override
+    public void internalHealthcheck() {
+        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
     }
 
     class Handler implements Runnable {
