@@ -20,6 +20,9 @@ import java.util.logging.Level;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
+import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
+import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
+
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
     private final Storage storage;
     private final ExecutorService pool;
