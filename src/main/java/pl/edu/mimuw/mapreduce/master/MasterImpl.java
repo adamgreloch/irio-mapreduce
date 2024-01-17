@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
@@ -22,8 +21,7 @@ import java.util.concurrent.Executors;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase {
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel batchManagerChannel =
-            ManagedChannelBuilder.forTarget(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
+    private final ManagedChannel batchManagerChannel = Utils.createCustomManagedChannelBuilder(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {

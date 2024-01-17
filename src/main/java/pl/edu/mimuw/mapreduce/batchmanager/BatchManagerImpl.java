@@ -4,7 +4,6 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
@@ -35,7 +34,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel taskManagerChannel =
-            ManagedChannelBuilder.forTarget(ClusterConfig.TASK_MANAGERS_URI).executor(pool).usePlaintext().build();
+            Utils.createCustomManagedChannelBuilder(ClusterConfig.TASK_MANAGERS_URI).executor(pool).build();
 
     /**
      * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.

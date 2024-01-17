@@ -3,7 +3,6 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
@@ -38,7 +37,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase {
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel workerChannel =
-            ManagedChannelBuilder.forTarget(ClusterConfig.WORKERS_URI).executor(pool).usePlaintext().build();
+            Utils.createCustomManagedChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
 
     public TaskManagerImpl(Storage storage) {
         this.storage = storage;

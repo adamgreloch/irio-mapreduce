@@ -1,6 +1,7 @@
 package pl.edu.mimuw.mapreduce;
 
 import com.google.common.util.concurrent.FutureCallback;
+import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
@@ -34,6 +35,10 @@ public class Utils {
         }));
 
         server.awaitTermination();
+    }
+
+    public static ManagedChannelBuilder<?> createCustomManagedChannelBuilder(String target) {
+        return ManagedChannelBuilder.forTarget(target).defaultLoadBalancingPolicy("round_robin");
     }
 
     public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver, MissingConnectionWithLayer connectingTo) {
