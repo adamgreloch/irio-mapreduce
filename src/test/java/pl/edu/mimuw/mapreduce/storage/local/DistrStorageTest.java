@@ -50,7 +50,7 @@ class DistrStorageTest {
         long dirId = 1;
         long fileId = 1;
 
-        assertThrows(IllegalStateException.class, () -> storage.getFile(dirId, fileId));
+        assertThrows(IllegalStateException.class, () -> storage.getFile(String.valueOf(dirId), fileId));
     }
 
     @Test
@@ -70,7 +70,7 @@ class DistrStorageTest {
             fail("Exception not expected: " + e.getMessage());
         }
 
-        FileRep fileRep = storage.getFile(dirId, fileId);
+        FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
         assertNotNull(fileRep);
         assertEquals(fileId, fileRep.id());
 
@@ -96,10 +96,10 @@ class DistrStorageTest {
             Files.write(tempFile.toPath(), "abcd".getBytes(), StandardOpenOption.CREATE);
 
             // Call putFile method to copy the content to the storage
-            storage.putFile(dirId, fileId, tempFile);
+            storage.putFile(String.valueOf(dirId), fileId, tempFile);
 
             // Verify if the content of the new file matches the expected content
-            FileRep fileRep = storage.getFile(dirId, fileId);
+            FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
             assertNotNull(fileRep);
             assertEquals(fileId, fileRep.id());
 
@@ -124,7 +124,7 @@ class DistrStorageTest {
         File dir = new File("1");
         dir.mkdir();
 
-        long fileCount = storage.getFileCount(dirId);
+        long fileCount = storage.getFileCount(String.valueOf(dirId));
         dir.delete();
         assertEquals(0, fileCount);
     }
@@ -143,7 +143,7 @@ class DistrStorageTest {
             File[] files = createFiles(3, dirId, storage.getStoragePath());
 
             // Call getFileCount method to get the number of files in the directory
-            long fileCount = storage.getFileCount(dirId);
+            long fileCount = storage.getFileCount(String.valueOf(dirId));
 
             // Verify if the number of files matches the expected number
             assertEquals(3, fileCount);
@@ -166,7 +166,7 @@ class DistrStorageTest {
         dir.mkdir();
         File[] files = createFiles(10, dirId, storage.getStoragePath());
 
-        List<Split> splitList = storage.getSplitsForDir(dirId, splits);
+        List<Split> splitList = storage.getSplitsForDir(String.valueOf(dirId), splits);
         assertEquals(splits, splitList.size());
         assertEquals(0, splitList.get(0).getBeg());
         assertEquals(2, splitList.get(0).getEnd());
@@ -190,7 +190,7 @@ class DistrStorageTest {
         File[] files = createFiles(20, dirId, storage.getStoragePath()); // create more files than split iterator has
         Split split = new SplitBuilder(beg, end).build();
 
-        Iterator<Path> iterator = storage.getSplitIterator(dirId, split);
+        Iterator<Path> iterator = storage.getSplitIterator(String.valueOf(dirId), split);
         for (int i = 0; i <= 10; i++) {
             assertTrue(iterator.hasNext());
             Path filePath = iterator.next();
@@ -211,7 +211,7 @@ class DistrStorageTest {
         dir.mkdir();
         File[] files = createFiles(20, dirId, storage.getStoragePath());
 
-        Iterator<Path> iterator = storage.getDirIterator(dirId);
+        Iterator<Path> iterator = storage.getDirIterator(String.valueOf(dirId));
         assertNotNull(iterator);
         for (int i = 0; i < 20; i++) {
             assertTrue(iterator.hasNext());

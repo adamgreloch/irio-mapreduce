@@ -30,8 +30,8 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public FileRep getFile(long dirId, long fileId) {
-        Path dirPath = storagePath.resolve(String.valueOf(dirId));
+    public FileRep getFile(String dirId, long fileId) {
+        Path dirPath = storagePath.resolve(dirId);
         Path filePath = dirPath.resolve(String.valueOf(fileId));
         File file = new File(filePath.toString());
         if (!file.exists()) {
@@ -50,23 +50,23 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public Path getDirPath(long dirId) {
-        return storagePath.resolve(String.valueOf(dirId));
+    public Path getDirPath(String dirId) {
+        return storagePath.resolve(dirId);
     }
 
     @Override
-    public void putFile(long dirId, long fileId, File file) {
+    public void putFile(String dirId, long fileId, File file) {
         try {
-            Files.move(file.toPath(), Paths.get((storagePath.resolve(String.valueOf(dirId))).resolve(String.valueOf(fileId)).toString()), ATOMIC_MOVE);
+            Files.move(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()), ATOMIC_MOVE);
         } catch (Exception e) {
             throw new IllegalStateException("Cannot move file atomically");
         }
     }
 
     @Override
-    public long getFileCount(long dirId) {
+    public long getFileCount(String dirId) {
         long length = 0;
-        try (Stream<Path> files = Files.list(Paths.get(String.valueOf(dirId)))) {
+        try (Stream<Path> files = Files.list(Paths.get(dirId))) {
             length = files.count();
         } catch (Exception e) {
             throw new IllegalStateException("Cannot count files");
@@ -75,7 +75,7 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public List<Split> getSplitsForDir(long dirId, int splits) {
+    public List<Split> getSplitsForDir(String dirId, int splits) {
         List<Split> splitList = new ArrayList<>();
         long fileCount = getFileCount(dirId);
         long splitSize = fileCount / splits;
@@ -93,7 +93,7 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public Iterator<Path> getSplitIterator(long dirId, Split split) {
+    public Iterator<Path> getSplitIterator(String dirId, Split split) {
         return new Iterator<Path>() {
             private long current = split.getBeg();
 
@@ -102,13 +102,13 @@ public class DistrStorage implements Storage {
 
             @Override
             public Path next() {
-                return storagePath.resolve(String.valueOf(dirId)).resolve(String.valueOf(current++));
+                return storagePath.resolve(dirId).resolve(String.valueOf(current++));
             }
         };
     }
 
     @Override
-    public Iterator<Path> getDirIterator(long dirId) {
+    public Iterator<Path> getDirIterator(String dirId) {
         return new Iterator<Path>() {
             private long current = 0;
 
@@ -119,7 +119,7 @@ public class DistrStorage implements Storage {
 
             @Override
             public Path next() {
-                return storagePath.resolve(String.valueOf(dirId)).resolve(String.valueOf(current++));
+                return storagePath.resolve(dirId).resolve(String.valueOf(current++));
             }
         };
     }

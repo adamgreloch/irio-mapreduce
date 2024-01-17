@@ -35,12 +35,12 @@ public class ConcurrentMapProcessor implements AutoCloseable {
         this.binaries = new ConcurrentHashMap<>();
         this.binIds = binIds;
         for (var binId : binIds)
-            this.binaries.put(binId, storage.getFile(Storage.BINARY_DIR, binId).file());
+            this.binaries.put(binId, storage.getFile(String.valueOf(Storage.BINARY_DIR), binId).file());
     }
 
     public void map() throws ExecutionException, InterruptedException {
         ArrayList<Future<Void>> futures = new ArrayList<>();
-        for (Iterator<Path> it = storage.getSplitIterator(dataDir, split); it.hasNext(); ) {
+        for (Iterator<Path> it = storage.getSplitIterator(String.valueOf(dataDir), split); it.hasNext(); ) {
             Path path = it.next();
             futures.add(pool.submit(new FileProcessor(storage.getFile(path), binaries.size())));
         }
@@ -77,7 +77,7 @@ public class ConcurrentMapProcessor implements AutoCloseable {
                 String outputPath;
                 if (i == binaryCount - 1) {
                     // Partition phase. The output path is just a destination directory
-                    outputPath = storage.getDirPath(destDirId).toAbsolutePath().toString();
+                    outputPath = storage.getDirPath(String.valueOf(destDirId)).toAbsolutePath().toString();
                 } else {
                     outputPath = files[1 - i % 2].getAbsolutePath();
                 }
@@ -88,7 +88,7 @@ public class ConcurrentMapProcessor implements AutoCloseable {
                 i++;
             }
 
-            storage.putFile(destDirId, fr.id(), files[(int) binaryCount]);
+            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) binaryCount]);
             return null;
         }
     }
