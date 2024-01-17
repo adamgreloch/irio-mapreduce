@@ -9,7 +9,7 @@ application {
 docker {
     javaApplication {
         ports = [5044, 4242]
-        images = ['taskmanager:latest']
+        images = ['us-central1-docker.pkg.dev/mapreduce-42/mapreduce/taskmanager:latest']
     }
 }
 

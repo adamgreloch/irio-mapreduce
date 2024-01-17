@@ -1,6 +1,7 @@
 package pl.edu.mimuw.mapreduce.worker;
 
 import io.grpc.stub.StreamObserver;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
 import pl.edu.mimuw.proto.common.Response;
@@ -15,14 +16,14 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
-import java.util.logging.Logger;
+
+import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
+import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
 import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.workerimpl");
-
     private final Storage storage;
     private final ExecutorService pool;
 
@@ -67,7 +68,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
             try (var processor = new ConcurrentMapProcessor(storage, split, task.getTaskBinIdsList(),
                     task.getInputDirId(), task.getDestDirId())) {
 
-                logger.log(Level.FINE, "performing map");
+                Utils.LOGGER.log(Level.FINE, "performing map");
 
                 if (task.getTaskType() != Map)
                     throw new RuntimeException("bad task type");
@@ -78,7 +79,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
             } catch (Exception e) {
                 statusCode = StatusCode.Err;
                 message = e.toString();
-                logger.log(Level.WARNING, "processing failed: ", e);
+                Utils.LOGGER.log(Level.WARNING, "processing failed: ", e);
             }
 
             var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();
@@ -107,16 +108,16 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase {
                 if (task.getTaskType() != Reduce)
                     throw new RuntimeException("bad task type");
 
-                logger.log(Level.FINE, "performing reduce");
+                Utils.LOGGER.log(Level.FINE, "performing reduce");
 
                 // TODO perform reduce
-                logger.log(Level.WARNING, "reducing todo");
+                Utils.LOGGER.log(Level.WARNING, "reducing todo");
 
                 statusCode = StatusCode.Ok;
             } catch (Exception e) {
                 statusCode = StatusCode.Err;
                 message = e.toString();
-                logger.log(Level.WARNING, "processing failed: ", e);
+                Utils.LOGGER.log(Level.SEVERE, "processing failed: ", e);
             }
 
             var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();

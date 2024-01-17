@@ -10,28 +10,33 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 
 import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class Utils {
-    public static void start_service(io.grpc.BindableService service, int port) throws IOException,
+    public static final Logger LOGGER = Logger.getLogger(Utils.class.getName());
+
+    public static void start_service(io.grpc.BindableService service, String target) throws IOException,
             InterruptedException {
+
+        int port = Integer.parseInt(target.split(":")[1]);
         Server server =
-                ServerBuilder.forPort(port).addService(service).addService(ProtoReflectionService.newInstance()) //
-                // reflection
-                .build();
+                ServerBuilder.forPort(port).addService(service).addService(ProtoReflectionService.newInstance()).build();
 
         server.start();
 
+        Utils.LOGGER.log(Level.INFO, "Started service " + service.getClass().getSimpleName() + " on " + target);
+
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Received Shutdown Request");
+            Utils.LOGGER.log(Level.INFO, "Received shutdown request");
             server.shutdown();
-            System.out.println("Successfully stopped the server");
+            Utils.LOGGER.log(Level.INFO, "Successfully stopped the server");
         }));
 
         server.awaitTermination();
     }
 
-    public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver,
-                                                                  MissingConnectionWithLayer connectingTo) {
+    public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver, MissingConnectionWithLayer connectingTo) {
         return new FutureCallback<PingResponse>() {
             @Override
             public void onSuccess(PingResponse result) {
@@ -41,10 +46,8 @@ public class Utils {
 
             @Override
             public void onFailure(Throwable t) {
-                PingResponse pingResponse = PingResponse.newBuilder()
-                        .setStatusCode(HealthStatusCode.Error)
-                        .setMissingLayer(MissingConnectionWithLayer.BatchManager)
-                        .build();
+                PingResponse pingResponse =
+                        PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).setMissingLayer(MissingConnectionWithLayer.BatchManager).build();
                 responseObserver.onNext(pingResponse);
                 responseObserver.onCompleted();
             }

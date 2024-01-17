@@ -19,14 +19,11 @@ import pl.edu.mimuw.proto.master.MasterGrpc;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Logger;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.master");
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel batchManagerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.BATCH_MANAGERS_HOST,
-                    ClusterConfig.BATCH_MANAGERS_PORT).executor(pool).usePlaintext().build();
+            ManagedChannelBuilder.forTarget(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {

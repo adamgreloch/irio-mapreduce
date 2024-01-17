@@ -27,7 +27,9 @@ Input files does not need to be sorted, but there is a guarantee that
 all values for a given key are in the input file.
 
 
-## gRPC/protobuf workflow
+## Build
+
+### gRPC
 
 To generate Java stubs based on `src/main/proto` files, invoke
 
@@ -37,3 +39,7 @@ To generate Java stubs based on `src/main/proto` files, invoke
 
 Service stubs (`ImplBase` classes) will be located
 under `/build/generated/main/grpc/`
+
+### Pushing Docker images to Artifact Registry
+
+https://cloud.google.com/artifact-registry/docs/docker/authentication

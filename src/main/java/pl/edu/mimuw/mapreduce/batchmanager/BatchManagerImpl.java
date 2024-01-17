@@ -24,11 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
 
 public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
-    private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.batchmanagerimpl");
-
     enum BatchPhase {
         Mapping, Reducing
     }
@@ -38,8 +35,7 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     private final Map<Batch, BatchPhase> batchPhases = new ConcurrentHashMap<>();
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel taskManagerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.TASK_MANAGERS_HOST,
-            ClusterConfig.TASK_MANAGERS_PORT).executor(pool).usePlaintext().build();
+            ManagedChannelBuilder.forTarget(ClusterConfig.TASK_MANAGERS_URI).executor(pool).usePlaintext().build();
 
     /**
      * Get next Task to be done in batch if it exists. Returns empty optional if there is no more tasks.

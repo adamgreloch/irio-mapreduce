@@ -8,8 +8,8 @@ application {
 
 docker {
     javaApplication {
-        ports = [5040, 4242]
-        images = ['master:latest']
+        ports = [5042, 4242]
+        images = ['us-central1-docker.pkg.dev/mapreduce-42/mapreduce/master:latest']
     }
 }
 
