@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.concurrent.*;
 
 public class ConcurrentMapProcessor implements AutoCloseable {
-    private final long dataDir;
-    private final long destDirId;
+    private final String dataDir;
+    private final String destDirId;
     private final ConcurrentHashMap<Long, File> binaries;
     private final List<Long> binIds;
     private final String tempDir;
@@ -24,8 +24,8 @@ public class ConcurrentMapProcessor implements AutoCloseable {
 
     private static final ExecutorService pool = Executors.newCachedThreadPool();
 
-    public ConcurrentMapProcessor(Storage storage, Split split, List<Long> binIds, long dataDir,
-                                  long destDirId) throws IOException {
+    public ConcurrentMapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
+                                  String destDirId) throws IOException {
         this.dataDir = dataDir;
         this.destDirId = destDirId;
         this.split = split;
