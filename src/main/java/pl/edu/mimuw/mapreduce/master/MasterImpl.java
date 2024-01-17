@@ -16,6 +16,7 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,9 +25,9 @@ import java.util.logging.Logger;
 public class MasterImpl extends MasterGrpc.MasterImplBase {
     private static final Logger logger = Logger.getLogger("pl.edu.mimuw.mapreduce.master");
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel batchManagerChannel =
-            ManagedChannelBuilder.forAddress(ClusterConfig.BATCH_MANAGERS_HOST,
-                    ClusterConfig.BATCH_MANAGERS_PORT).executor(pool).usePlaintext().build();
+    private final ManagedChannel taskManagerChannel =
+            ManagedChannelBuilder.forAddress(ClusterConfig.TASK_MANAGERS_HOST,
+                    ClusterConfig.TASK_MANAGERS_PORT).executor(pool).usePlaintext().build();
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {
@@ -48,19 +49,19 @@ public class MasterImpl extends MasterGrpc.MasterImplBase {
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
-        var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
-        ListenableFuture<Response> listenableFuture = batchManagerFutureStub.doBatch(request);
+        ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
         Futures.addCallback(listenableFuture, createCallback(responseObserver), pool);
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture =
-                batchManagerFutureStub.healthCheck(request);
+                taskManagerFutureStub.healthCheck(request);
         Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
-                MissingConnectionWithLayer.BatchManager), pool);
+                MissingConnectionWithLayer.TaskManager), pool);
     }
 }
