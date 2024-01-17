@@ -6,19 +6,20 @@ import io.grpc.Server;
 import io.grpc.ServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.StreamObserver;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 
 import java.io.IOException;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class Utils {
     public static final Logger LOGGER = Logger.getLogger(Utils.class.getName());
 
-    public static void start_service(io.grpc.BindableService service, String target) throws IOException,
-            InterruptedException {
+    public static <T extends io.grpc.BindableService & HealthCheckable> void start_service(T service, String target) throws IOException, InterruptedException {
 
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
@@ -26,13 +27,18 @@ public class Utils {
 
         server.start();
 
-        Utils.LOGGER.log(Level.INFO, "Started service " + service.getClass().getSimpleName() + " on " + target);
+        Utils.LOGGER.log(Level.INFO,
+                "Started service " + service.getClass().getSimpleName() + " on port " + server.getPort());
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             Utils.LOGGER.log(Level.INFO, "Received shutdown request");
             server.shutdown();
             Utils.LOGGER.log(Level.INFO, "Successfully stopped the server");
         }));
+
+        TimeUnit.SECONDS.sleep(3);
+        Utils.LOGGER.log(Level.INFO, "Issuing initial healthcheck");
+        service.internalHealthcheck();
 
         server.awaitTermination();
     }

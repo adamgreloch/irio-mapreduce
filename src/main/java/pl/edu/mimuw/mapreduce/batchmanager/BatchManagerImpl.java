@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
@@ -23,8 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 
-public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
+public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase implements HealthCheckable {
     enum BatchPhase {
         Mapping, Reducing
     }
@@ -148,5 +150,10 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
         var listenableFuture = taskManagerFutureStub.healthCheck(request);
         Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
                 MissingConnectionWithLayer.TaskManager), pool);
+    }
+
+    @Override
+    public void internalHealthcheck() {
+        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
     }
 }
