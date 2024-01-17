@@ -8,7 +8,6 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
-import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
