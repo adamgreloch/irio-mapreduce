@@ -17,6 +17,9 @@ public interface Storage {
     /** Retrieves a file with id fileId from a directory dirId */
     FileRep getFile(long dirId, long fileId);
 
+    /** Retrieves a file with id fileId from a directory dirId */
+    FileRep getFile(String dirId, long fileId);
+
     FileRep getFile(Path path);
 
     Path getDirPath(long dirId);
@@ -24,11 +27,14 @@ public interface Storage {
     /** Puts a file with id fileId to a directory dirId */
     void putFile(long dirId, long fileId, File file);
 
+    /** Puts a file with id fileId to a directory dirId */
+    void putFile(String dirId, long fileId, File file);
+
     /** Gets a number of files in directory dirId */
     long getFileCount(long dirId);
 
     /** Splits a directory id range into equal splits */
-    List<Split> getSplitsForDir(long dirId, int splits);
+    List<Split> getSplitsForDir(String dirId, int splits);
 
     /** Gets an iterator over files from a split of directory dirId */
     Iterator<Path> getSplitIterator(long dirId, Split split);
