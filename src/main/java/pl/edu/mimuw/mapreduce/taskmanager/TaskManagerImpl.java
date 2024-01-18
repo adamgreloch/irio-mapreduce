@@ -27,10 +27,8 @@ import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.logging.Level;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Logger;
+import java.util.logging.Level;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     public static void start() throws IOException, InterruptedException {
@@ -61,10 +59,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             /** Propagate error message. */
             @Override
             public void onFailure(Throwable t) {
-                Response response =
-                        Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
+                Utils.respondWithThrowable(t, responseObserver);
             }
         };
     }
@@ -92,25 +87,25 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     class Handler implements Runnable {
         private final Batch batch;
         private final StreamObserver<Response> responseObserver;
-        private CountDownLatch operationsDoneLatch;
+        private CountDownLatch phaseDoneLatch;
         private final int splitsNum;
         private final AtomicInteger nextTaskId;
-        private final Integer R_COUNT;
-        private final List<String> dirBatch; //List of directories that belong do batch.
-        private final String TMWorkingDir;
+        private final Integer reduceTaskCount;
+        private final List<String> workersDestDirIds; // List of directories that belong do batch.
+        private final String finalDestDirId;
 
         Handler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
             this.responseObserver = responseObserver;
             this.splitsNum = 10;
-            this.operationsDoneLatch = new CountDownLatch(splitsNum);
+            this.phaseDoneLatch = new CountDownLatch(splitsNum);
             this.nextTaskId = new AtomicInteger(0);
-            this.dirBatch = new ArrayList<>();
-            this.R_COUNT = batch.getReduceBinIdsCount();
-            this.TMWorkingDir = UUID.randomUUID().toString();
+            this.workersDestDirIds = new ArrayList<>();
+            this.reduceTaskCount = batch.getReduceBinIdsCount();
+            this.finalDestDirId = batch.getFinalDestDirId();
         }
 
-        private Task createMapTask(Split split) {
+        private Task createMapTask() {
             return Task.newBuilder()
                     .setTaskId(nextTaskId.getAndIncrement())
                     .setTaskType(Task.TaskType.Map)
@@ -135,87 +130,75 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         @Override
         public void run() {
 
-            //Mapping phase
+            // Mapping phase
             List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
 
             for (Split split : splits) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-                Task task = createMapTask(split);
-                dirBatch.add(task.getDestDirId());
+                Task task = createMapTask();
+                workersDestDirIds.add(task.getDestDirId());
 
                 var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
                 Futures.addCallback(listenableFuture,
-                        createWorkerResponseCallback(responseObserver, operationsDoneLatch),
+                        createWorkerResponseCallback(responseObserver, phaseDoneLatch),
                         pool);
             }
 
-            //Concatenation phase
+            // Concatenation phase
 
             try {
-                operationsDoneLatch.await();
+                phaseDoneLatch.await();
             } catch (InterruptedException e) {
-                var response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
+                Utils.respondWithThrowable(e, responseObserver);
             }
 
-            List<Integer> fileIDs = new ArrayList<>();
+            List<Integer> fileIds = new ArrayList<>();
 
-            //assert if dirbatch is not empty
-            for (int i = 0; i < R_COUNT; i++) {
-                File mergedFile = storage.getFile(dirBatch.get(0), i).file();
+            assert !workersDestDirIds.isEmpty();
 
-                //TODO wyabstrachować to do funkcji
-                OutputStream outputStream = null;
-                try {
-                    outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true));
-                    for (int j = 1; j < dirBatch.size(); j++) {
-                        InputStream inputStream = null;
-                        try {
-                            File file = storage.getFile(dirBatch.get(j), i).file();
-                            inputStream = new BufferedInputStream(new FileInputStream(file));
+            for (int i = 0; i < reduceTaskCount; i++) {
+                File mergedFile = new File(storage.getDirPath(finalDestDirId).resolve(String.valueOf(i)).toUri());
+
+                for (var workersDestDirId : workersDestDirIds) {
+                    try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
+                        File file = storage.getFile(workersDestDirId, i).file();
+                        try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
                             IOUtils.copy(inputStream, outputStream);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
-                        } finally {
-                            IOUtils.closeQuietly(inputStream);
                         }
+                    } catch (IOException e) {
+                        Utils.respondWithThrowable(e, responseObserver);
                     }
-                } catch (FileNotFoundException e) {
-                    throw new RuntimeException(e);
-                } finally {
-                    IOUtils.closeQuietly(outputStream);
                 }
-                //Nie powinno być kolizji id bo jesteśmy jedynimi którzy wkładają do tego konkretnego dest.
-                storage.putFile(TMWorkingDir, i, mergedFile);
-                fileIDs.add(i);
+
+                storage.putFile(finalDestDirId, i, mergedFile);
+                fileIds.add(i);
             }
 
-            //Reduce phase
-            operationsDoneLatch = new CountDownLatch(splitsNum);
+            // Reduce phase
 
-            for (var fileId : fileIDs) {
+            phaseDoneLatch = new CountDownLatch(splitsNum);
+
+            for (var fileId : fileIds) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-                Task task = createReduceTask(TMWorkingDir);
+                Task task = createReduceTask(finalDestDirId);
 
                 var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, operationsDoneLatch), pool);
+                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch), pool);
             }
 
             try {
-                operationsDoneLatch.await();
+                phaseDoneLatch.await();
             } catch (InterruptedException e) {
-                var response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
+                Utils.respondWithThrowable(e, responseObserver);
             }
-            var response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+
+            Utils.respondWithSuccess(responseObserver);
         }
     }
 }

@@ -7,6 +7,8 @@ import io.grpc.ServerBuilder;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
+import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -63,5 +65,19 @@ public class Utils {
                 responseObserver.onCompleted();
             }
         };
+    }
+
+    public static void respondWithThrowable(Throwable e, StreamObserver<Response> responseObserver) {
+        Utils.LOGGER.log(Level.SEVERE, "RPC request failed with: " + e.getMessage());
+        var response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
+    public static void respondWithSuccess(StreamObserver<Response> responseObserver) {
+        Utils.LOGGER.log(Level.FINE, "RPC request succeeded");
+        var response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
     }
 }
