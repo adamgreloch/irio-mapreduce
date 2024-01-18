@@ -2,30 +2,27 @@ package pl.edu.mimuw.mapreduce.master;
 
 import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Rule;
 import org.junit.jupiter.api.Test;
-import pl.edu.mimuw.mapreduce.batchmanager.BatchManagerImpl;
+import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
+import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
+import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
+import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 
 public class MasterImplTest {
-    public class BatchManagerThread extends Thread {
-
-        public void run() {
-            try {
-                BatchManagerImpl.start();
-            } catch (Exception e) {
-                System.err.println(e);
-            }
-        }
-    }
-
     public class TaskManagerThread extends Thread {
 
         public void run() {
@@ -37,36 +34,68 @@ public class MasterImplTest {
         }
     }
 
+    public class WorkerThread extends Thread {
+
+        public void run() {
+            try {
+                WorkerImpl.start();
+            } catch (Exception e) {
+                System.err.println(e);
+            }
+        }
+    }
+
     @Rule
     public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @Test
-    public void masterImpl_shouldDoHealthCheck() throws Exception {
-        // Run a TaskManager instance
-        Thread thread = new BatchManagerThread();
-        thread.start();
+    public void masterImpl_correctlyHealthChecksLowerLayers() throws Exception {
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
-        Thread taskManagerThread = new TaskManagerThread();
-        taskManagerThread.start();
+        HealthStatusManager taskManagerhealth = new HealthStatusManager();
+        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerhealth,
+                ClusterConfig.WORKERS_URI), taskManagerhealth, ClusterConfig.TASK_MANAGERS_URI);
+
+        HealthStatusManager workerHealth = new HealthStatusManager();
+        var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,
+                ClusterConfig.WORKERS_URI);
 
         // Generate a unique in-process server name.
-        String serverName = InProcessServerBuilder.generateName();
+        String masterName = InProcessServerBuilder.generateName();
 
+        HealthStatusManager masterHealth = new HealthStatusManager();
         // Create a server, add service, start, and register for automatic graceful shutdown.
-        var x = grpcCleanup.register(InProcessServerBuilder
-                .forName(serverName).directExecutor().addService(new MasterImpl()).build().start());
+        var masterService =
+                grpcCleanup.register(InProcessServerBuilder.forName(masterName).directExecutor().addService(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI)).build().start());
 
         MasterGrpc.MasterBlockingStub blockingStub = MasterGrpc.newBlockingStub(
                 // Create a client channel and register for automatic graceful shutdown.
-                grpcCleanup.register(InProcessChannelBuilder.forName(serverName).directExecutor().build()));
+                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
 
-        PingResponse response =
-                blockingStub.healthCheck(pl.edu.mimuw.proto.healthcheck.Ping.newBuilder().build());
+        TimeUnit.SECONDS.sleep(1);
 
+        PingResponse response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+        // Everyone is alive here
+        assertEquals(HealthStatusCode.Healthy, response.getStatusCode());
+
+        workerServer.shutdownNow().awaitTermination();
+
+        response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+        // Worker should be unavailable
         assertEquals(HealthStatusCode.Error, response.getStatusCode());
-        assertEquals(MissingConnectionWithLayer.Worker_VALUE, response.getMissingLayerValue());
+        assertEquals(MissingConnectionWithLayer.Worker, response.getMissingLayer());
 
-        x.shutdownNow();
+        taskManagerServer.shutdownNow().awaitTermination();
+
+        response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+        // Task manager should be unavailable
+        assertEquals(HealthStatusCode.Error, response.getStatusCode());
+        assertEquals(MissingConnectionWithLayer.TaskManager, response.getMissingLayer());
+
+        masterService.shutdownNow().awaitTermination();
     }
 
 }

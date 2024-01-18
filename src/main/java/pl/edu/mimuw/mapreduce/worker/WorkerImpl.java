@@ -36,7 +36,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_service(new WorkerImpl(storage, health), health, ClusterConfig.WORKERS_URI);
+        Utils.start_server(new WorkerImpl(storage, health), health, ClusterConfig.WORKERS_URI).awaitTermination();
     }
 
     public WorkerImpl(Storage storage, HealthStatusManager health) {

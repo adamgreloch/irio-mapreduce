@@ -24,7 +24,7 @@ import java.util.logging.Logger;
 public class Utils {
     public static final Logger LOGGER = Logger.getLogger(Utils.class.getName());
 
-    public static void start_service(BindableService service, HealthStatusManager health, String target) throws IOException, InterruptedException {
+    public static Server start_server(BindableService service, HealthStatusManager health, String target) throws IOException, InterruptedException {
 
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
@@ -48,7 +48,7 @@ public class Utils {
             Utils.LOGGER.log(Level.INFO, "Successfully stopped the server");
         }));
 
-        server.awaitTermination();
+        return server;
     }
 
     private static Map<String, Object> generateHealthConfig(String serviceName) {
@@ -63,7 +63,8 @@ public class Utils {
     public static ManagedChannelBuilder<?> createCustomClientChannelBuilder(String target) {
         return ManagedChannelBuilder.forTarget(target)
                 .defaultLoadBalancingPolicy("round_robin")
-                .defaultServiceConfig(generateHealthConfig(""));
+                .defaultServiceConfig(generateHealthConfig(""))
+                .usePlaintext();
     }
 
     public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver, MissingConnectionWithLayer connectingTo) {

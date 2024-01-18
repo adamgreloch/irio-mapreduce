@@ -11,7 +11,6 @@ import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
-import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -25,11 +24,12 @@ import java.util.logging.Level;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel batchManagerChannel = Utils.createCustomClientChannelBuilder(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
+    private final ManagedChannel taskManagerChannel;
     private final HealthStatusManager health;
 
-    public MasterImpl(HealthStatusManager health) {
+    public MasterImpl(HealthStatusManager health, String taskManagersUri) {
         this.health = health;
+        this.taskManagerChannel = Utils.createCustomClientChannelBuilder(taskManagersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
@@ -37,30 +37,27 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_service(new MasterImpl(health), health, ClusterConfig.MASTERS_URI);
+        Utils.start_server(new MasterImpl(health, ClusterConfig.TASK_MANAGERS_URI), health,
+                ClusterConfig.MASTERS_URI).awaitTermination();
     }
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {
             @Override
             public void onSuccess(Response result) {
-                responseObserver.onNext(result);
-                responseObserver.onCompleted();
+                Utils.respondWithSuccess(responseObserver);
             }
 
             @Override
             public void onFailure(Throwable t) {
-                Response response =
-                        Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
+                Utils.respondWithThrowable(t, responseObserver);
             }
         };
     }
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
         Futures.addCallback(listenableFuture, createCallback(responseObserver), pool);
@@ -73,7 +70,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture =
                 taskManagerFutureStub.healthCheck(request);

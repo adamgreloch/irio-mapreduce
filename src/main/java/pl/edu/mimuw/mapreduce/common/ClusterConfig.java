@@ -10,8 +10,6 @@ public class ClusterConfig {
 
     public static final String TASK_MANAGERS_URI = env_or("TASKMGR_SERVICE_URI", "localhost:5044");
 
-    public static final String BATCH_MANAGERS_URI = env_or("BATCHMGR_SERVICE_URI", "localhost:5043");
-
     public static final String MASTERS_URI = env_or("MASTER_SERVICE_HOST", "localhost:5042");
 
     public static final String STORAGE_DIR;

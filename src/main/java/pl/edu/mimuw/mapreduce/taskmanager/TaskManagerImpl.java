@@ -34,13 +34,13 @@ import java.util.logging.Level;
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel workerChannel =
-            Utils.createCustomClientChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
+    private final ManagedChannel workerChannel;
     private final HealthStatusManager health;
 
-    public TaskManagerImpl(Storage storage, HealthStatusManager health) {
+    public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         this.health = health;
+        this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
@@ -49,7 +49,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_service(new TaskManagerImpl(storage, health), health, ClusterConfig.TASK_MANAGERS_URI);
+        Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
+                ClusterConfig.TASK_MANAGERS_URI).awaitTermination();
     }
 
     private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
