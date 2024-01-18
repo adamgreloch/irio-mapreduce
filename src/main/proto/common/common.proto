@@ -15,7 +15,8 @@ message Batch {
   repeated int64 map_bin_ids = 1; // binary IDs of map tasks
   int64 partition_bin_id = 2; // binary IDs of partitioner
   repeated int64 reduce_bin_ids = 3; // binary IDs of reduce tasks
-  uint64 input_id = 4; // ID of range of data to batch-process
+  string input_id = 4; // ID of range of data to batch-process
+  string final_dest_dir_id = 5; // ID of directory with results
 }
 
 message Task {
@@ -26,8 +27,8 @@ message Task {
   }
   TaskType task_type = 2;
 
-  uint64 input_dir_id = 3; // directory ID of input data
-  uint64 dest_dir_id = 4; // processed files should be put to a location with this ID
+  string input_dir_id = 3; // directory ID of input data
+  string dest_dir_id = 4; // processed files should be put to a location with this ID
 
   // Binary IDs of map tasks and a partition binary at the end.
   // OR one binary ID of reduce task

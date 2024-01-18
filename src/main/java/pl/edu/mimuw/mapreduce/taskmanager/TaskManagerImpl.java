@@ -2,32 +2,32 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
+import org.apache.commons.io.IOUtils;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
-import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
-import pl.edu.mimuw.proto.common.Response;
-import pl.edu.mimuw.proto.common.StatusCode;
-import pl.edu.mimuw.proto.common.Task;
+import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
+import pl.edu.mimuw.proto.worker.DoMapRequest;
+import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
-import java.io.IOException;
+import java.io.*;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
@@ -45,9 +45,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         this.storage = storage;
     }
 
-    private FutureCallback<Response> createWorkerResponseCallback(Task task,
-                                                                  StreamObserver<Response> responseObserver,
-                                                                  WorkerGrpc.WorkerFutureStub workerFutureStub,
+    private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
                                                                   CountDownLatch operationsDoneLatch) {
         return new FutureCallback<>() {
             @Override
@@ -61,17 +59,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             /** Propagate error message. */
             @Override
             public void onFailure(Throwable t) {
-                Response response =
-                        Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
-                responseObserver.onNext(response);
-                responseObserver.onCompleted();
+                Utils.respondWithThrowable(t, responseObserver);
             }
         };
     }
 
     @Override
-    public void doTask(Task task, StreamObserver<Response> responseObserver) {
-        pool.execute(new Handler(task, responseObserver));
+    public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+        pool.execute(new Handler(batch, responseObserver));
     }
 
     @Override
@@ -90,97 +85,120 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     }
 
     class Handler implements Runnable {
-        private final Task task;
+        private final Batch batch;
         private final StreamObserver<Response> responseObserver;
-        private final CountDownLatch operationsDoneLatch;
-        private final boolean isReduce;
+        private CountDownLatch phaseDoneLatch;
         private final int splitsNum;
+        private final AtomicInteger nextTaskId;
+        private final Integer reduceTaskCount;
+        private final List<String> workersDestDirIds; // List of directories that belong do batch.
+        private final String finalDestDirId;
 
-        Handler(Task task, StreamObserver<Response> responseObserver) {
-            this.task = task;
+        Handler(Batch batch, StreamObserver<Response> responseObserver) {
+            this.batch = batch;
             this.responseObserver = responseObserver;
-            this.isReduce = task.getTaskType().equals(Task.TaskType.Reduce);
-
-            // TODO dynamic number of splits, either:
-            //  a) given by master (as a form of throughput optimization)
-            //  b) taken from k8s API
             this.splitsNum = 10;
-            this.operationsDoneLatch = new CountDownLatch(splitsNum);
+            this.phaseDoneLatch = new CountDownLatch(splitsNum);
+            this.nextTaskId = new AtomicInteger(0);
+            this.workersDestDirIds = new ArrayList<>();
+            this.reduceTaskCount = batch.getReduceBinIdsCount();
+            this.finalDestDirId = batch.getFinalDestDirId();
         }
 
-        public void run() {
-            var splits = storage.getSplitsForDir(task.getInputDirId(), splitsNum);
+        private Task createMapTask() {
+            return Task.newBuilder()
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Map)
+                    .setInputDirId(batch.getInputId())
+                    .setDestDirId(UUID.randomUUID().toString())
+                    .addAllTaskBinIds(batch.getMapBinIdsList())
+                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .build();
+        }
 
-            for (var split : splits) {
+        private Task createReduceTask(String inputDir) {
+            return Task.newBuilder()
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Reduce)
+                    .setInputDirId(inputDir)
+                    .setDestDirId(batch.getFinalDestDirId())
+                    .addAllTaskBinIds(batch.getMapBinIdsList())
+                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .build();
+        }
+
+        @Override
+        public void run() {
+
+            // Mapping phase
+            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
+
+            for (Split split : splits) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-                // TODO: send doMap/doReduce requests
-//                var doWorkRequest = DoWorkRequest.newBuilder().setTask(task).setSplit(split)
-//                .build();
-//
-//                ListenableFuture<Response> listenableFuture = workerFutureStub.doWork
-//                (doWorkRequest);
-//                Futures.addCallback(listenableFuture, createWorkerResponseCallback(task,
-//                responseObserver,
-//                        workerFutureStub, operationsDoneLatch), pool);
+                Task task = createMapTask();
+                workersDestDirIds.add(task.getDestDirId());
+
+                var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
+                ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
+                Futures.addCallback(listenableFuture,
+                        createWorkerResponseCallback(responseObserver, phaseDoneLatch),
+                        pool);
             }
 
-            Response response;
-
-            // TODO: remove this code, implement partition merging
+            // Concatenation phase
 
             try {
-                operationsDoneLatch.await();
+                phaseDoneLatch.await();
+            } catch (InterruptedException e) {
+                Utils.respondWithThrowable(e, responseObserver);
+            }
 
-                if (isReduce) {
-                    // If reduce was done, it is now necessary to combine the partial results from
-                    // all splits to one file, so it represents the result of the whole input.
-                    // TaskManager can orchestrate the process by assigning Combine tasks to
-                    // workers in a way that achieves a logarithmic complexity.
+            List<Integer> fileIds = new ArrayList<>();
 
-                    Queue<SplitBuilder> splitQueue = new LinkedList<>();
-                    for (var split : splits)
-                        splitQueue.add(new SplitBuilder(split));
-                    List<Future<Response>> futures = new ArrayList<>();
+            assert !workersDestDirIds.isEmpty();
 
-                    while (splitQueue.size() > 1) {
-                        var phaseSize = splitQueue.size();
-                        if (phaseSize % 2 != 0) phaseSize--;
+            for (int i = 0; i < reduceTaskCount; i++) {
+                File mergedFile = new File(storage.getDirPath(finalDestDirId).resolve(String.valueOf(i)).toUri());
 
-                        for (int i = 0; i < phaseSize; i += 2) {
-                            var s1 = splitQueue.poll();
-                            var s2 = splitQueue.poll();
-
-                            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
-
-                            assert s1 != null;
-                            assert s2 != null;
-//                            var combineRequest =
-//                                    DoCombineRequest.newBuilder().setCombineBinId(task
-//                                    .getTaskBinIds(1)).setDestDirId(task.getDataDirId())
-//                                    .setSplit1(s1.build()).setSplit2(s2.build()).build();
-//
-//                            ListenableFuture<Response> listenableFuture = workerFutureStub
-//                            .doCombine(combineRequest);
-//                            futures.add(listenableFuture);
-
-                            splitQueue.add(SplitBuilder.merge(s1, s2));
+                for (var workersDestDirId : workersDestDirIds) {
+                    try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
+                        File file = storage.getFile(workersDestDirId, i).file();
+                        try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
+                            IOUtils.copy(inputStream, outputStream);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
                         }
-                        for (var future : futures) {
-                            var workerResponse = future.get();
-                        }
-                        futures.clear();
+                    } catch (IOException e) {
+                        Utils.respondWithThrowable(e, responseObserver);
                     }
                 }
 
-                response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
-            } catch (Exception e) {
-                response =
-                        Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
+                storage.putFile(finalDestDirId, i, mergedFile);
+                fileIds.add(i);
             }
 
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+            // Reduce phase
+
+            phaseDoneLatch = new CountDownLatch(splitsNum);
+
+            for (var fileId : fileIds) {
+                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+
+                Task task = createReduceTask(finalDestDirId);
+
+                var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
+                ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch), pool);
+            }
+
+            try {
+                phaseDoneLatch.await();
+            } catch (InterruptedException e) {
+                Utils.respondWithThrowable(e, responseObserver);
+            }
+
+            Utils.respondWithSuccess(responseObserver);
         }
     }
 }

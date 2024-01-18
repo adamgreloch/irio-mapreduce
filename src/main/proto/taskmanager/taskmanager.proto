@@ -9,6 +9,6 @@ import "common/common.proto";
 import "healthcheck/healthcheck.proto";
 
 service TaskManager {
-  rpc DoTask(common.Task) returns (common.Response) {}
+  rpc DoBatch(common.Batch) returns (common.Response) {}
   rpc HealthCheck(healthcheck.Ping) returns (healthcheck.PingResponse) {} // probably not needed
 }

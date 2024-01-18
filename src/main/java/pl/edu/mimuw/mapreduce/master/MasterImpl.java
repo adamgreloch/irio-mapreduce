@@ -8,7 +8,6 @@ import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
-import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
@@ -16,6 +15,7 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -45,9 +45,9 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
-        var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
 
-        ListenableFuture<Response> listenableFuture = batchManagerFutureStub.doBatch(request);
+        ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
         Futures.addCallback(listenableFuture, createCallback(responseObserver), pool);
     }
 
@@ -58,11 +58,11 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        var batchManagerFutureStub = BatchManagerGrpc.newFutureStub(batchManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture =
-                batchManagerFutureStub.healthCheck(request);
+                taskManagerFutureStub.healthCheck(request);
         Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
-                MissingConnectionWithLayer.BatchManager), pool);
+                MissingConnectionWithLayer.TaskManager), pool);
     }
 }

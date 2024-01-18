@@ -15,24 +15,24 @@ public interface Storage {
     long MAPREDUCE_MIN = BINARY_DIR + 1;
 
     /** Retrieves a file with id fileId from a directory dirId */
-    FileRep getFile(long dirId, long fileId);
+    FileRep getFile(String dirId, long fileId);
 
     FileRep getFile(Path path);
 
-    Path getDirPath(long dirId);
+    Path getDirPath(String dirId);
 
     /** Puts a file with id fileId to a directory dirId */
-    void putFile(long dirId, long fileId, File file);
+    void putFile(String dirId, long fileId, File file);
 
     /** Gets a number of files in directory dirId */
-    long getFileCount(long dirId);
+    long getFileCount(String dirId);
 
     /** Splits a directory id range into equal splits */
-    List<Split> getSplitsForDir(long dirId, int splits);
+    List<Split> getSplitsForDir(String dirId, int splits);
 
     /** Gets an iterator over files from a split of directory dirId */
-    Iterator<Path> getSplitIterator(long dirId, Split split);
+    Iterator<Path> getSplitIterator(String dirId, Split split);
 
      /** Gets an iterator over all files in a directory dirId */
-    Iterator<Path> getDirIterator(long dirId);
+    Iterator<Path> getDirIterator(String dirId);
 }
