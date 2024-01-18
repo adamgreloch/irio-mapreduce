@@ -1,12 +1,15 @@
 package pl.edu.mimuw.mapreduce.worker;
 
+import io.grpc.health.v1.HealthCheckResponse;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
 import pl.edu.mimuw.proto.common.Response;
-import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -14,6 +17,7 @@ import pl.edu.mimuw.proto.worker.DoMapRequest;
 import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -24,10 +28,21 @@ import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheckable {
     private final Storage storage;
     private final ExecutorService pool;
+    private final HealthStatusManager health;
 
-    public WorkerImpl(Storage storage) {
+    public static void start() throws IOException, InterruptedException {
+        Utils.LOGGER.log(Level.INFO, "Hello from Worker!");
+
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
+        HealthStatusManager health = new HealthStatusManager();
+
+        Utils.start_service(new WorkerImpl(storage, health), health, ClusterConfig.WORKERS_URI);
+    }
+
+    public WorkerImpl(Storage storage, HealthStatusManager health) {
         this.storage = storage;
         this.pool = Executors.newCachedThreadPool();
+        this.health = health;
     }
 
     @Override
@@ -62,11 +77,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
         }
 
         public void run() {
+            health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
             var split = request.getSplit();
             var task = request.getTask();
-
-            StatusCode statusCode;
-            String message = "";
 
             try (var processor = new ConcurrentMapProcessor(storage, split, task.getTaskBinIdsList(),
                     task.getInputDirId(), task.getDestDirId())) {
@@ -76,21 +89,16 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                 if (task.getTaskType() != Map) throw new RuntimeException("bad task type");
 
                 processor.map();
-
-                statusCode = StatusCode.Ok;
             } catch (Exception e) {
-                statusCode = StatusCode.Err;
-                message = e.toString();
-                Utils.LOGGER.log(Level.WARNING, "processing failed: ", e);
+                Utils.respondWithThrowable(e, responseObserver);
             }
 
-            var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+            Utils.respondWithSuccess(responseObserver);
+            health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
     }
 
-    static class DoReduceHandler implements Runnable {
+    class DoReduceHandler implements Runnable {
         private final DoReduceRequest request;
         private final StreamObserver<Response> responseObserver;
 
@@ -100,11 +108,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
         }
 
         public void run() {
+            health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
             var file = request.getFileId();
             var task = request.getTask();
-
-            StatusCode statusCode;
-            String message = "";
 
             try {
                 if (task.getTaskType() != Reduce) throw new RuntimeException("bad task type");
@@ -112,18 +118,15 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                 Utils.LOGGER.log(Level.FINE, "performing reduce");
 
                 // TODO perform reduce
+
                 Utils.LOGGER.log(Level.WARNING, "reducing todo");
 
-                statusCode = StatusCode.Ok;
             } catch (Exception e) {
-                statusCode = StatusCode.Err;
-                message = e.toString();
-                Utils.LOGGER.log(Level.SEVERE, "processing failed: ", e);
+                Utils.respondWithThrowable(e, responseObserver);
             }
 
-            var response = Response.newBuilder().setStatusCode(statusCode).setMessage(message).build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
+            Utils.respondWithSuccess(responseObserver);
+            health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
     }
 }

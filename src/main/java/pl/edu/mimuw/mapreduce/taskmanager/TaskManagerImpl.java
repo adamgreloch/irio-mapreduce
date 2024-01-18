@@ -4,11 +4,12 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import org.apache.commons.io.IOUtils;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
-import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.*;
@@ -31,18 +32,24 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
-    public static void start() throws IOException, InterruptedException {
-        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
-        Utils.start_service(new TaskManagerImpl(storage), ClusterConfig.TASK_MANAGERS_URI);
-    }
-
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel workerChannel =
-            Utils.createCustomManagedChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
+            Utils.createCustomClientChannelBuilder(ClusterConfig.WORKERS_URI).executor(pool).build();
+    private final HealthStatusManager health;
 
-    public TaskManagerImpl(Storage storage) {
+    public TaskManagerImpl(Storage storage, HealthStatusManager health) {
         this.storage = storage;
+        this.health = health;
+    }
+
+    public static void start() throws IOException, InterruptedException {
+        Utils.LOGGER.log(Level.INFO, "Hello from TaskManager!");
+
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
+        HealthStatusManager health = new HealthStatusManager();
+
+        Utils.start_service(new TaskManagerImpl(storage, health), health, ClusterConfig.TASK_MANAGERS_URI);
     }
 
     private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
