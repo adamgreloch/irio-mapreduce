@@ -23,27 +23,6 @@ import java.util.concurrent.TimeUnit;
 import static org.junit.Assert.assertEquals;
 
 public class MasterImplTest {
-    public class TaskManagerThread extends Thread {
-
-        public void run() {
-            try {
-                TaskManagerImpl.start();
-            } catch (Exception e) {
-                System.err.println(e);
-            }
-        }
-    }
-
-    public class WorkerThread extends Thread {
-
-        public void run() {
-            try {
-                WorkerImpl.start();
-            } catch (Exception e) {
-                System.err.println(e);
-            }
-        }
-    }
 
     @Rule
     public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
@@ -52,9 +31,9 @@ public class MasterImplTest {
     public void masterImpl_correctlyHealthChecksLowerLayers() throws Exception {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
-        HealthStatusManager taskManagerhealth = new HealthStatusManager();
-        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerhealth,
-                ClusterConfig.WORKERS_URI), taskManagerhealth, ClusterConfig.TASK_MANAGERS_URI);
+        HealthStatusManager taskManagerHealth = new HealthStatusManager();
+        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
+                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
 
         HealthStatusManager workerHealth = new HealthStatusManager();
         var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,

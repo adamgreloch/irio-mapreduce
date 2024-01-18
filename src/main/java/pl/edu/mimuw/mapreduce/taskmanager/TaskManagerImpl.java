@@ -88,8 +88,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     }
 
     @Override
-    public void internalHealthcheck() {
+    public PingResponse internalHealthcheck() {
         Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+        return PingResponse.getDefaultInstance();
     }
 
     class Handler implements Runnable {

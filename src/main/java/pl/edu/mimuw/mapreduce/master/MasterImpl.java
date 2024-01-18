@@ -11,6 +11,7 @@ import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -18,6 +19,7 @@ import pl.edu.mimuw.proto.master.MasterGrpc;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
@@ -64,8 +66,23 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
     }
 
     @Override
-    public void internalHealthcheck() {
-        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+    public PingResponse internalHealthcheck() {
+        // TODO this probably can be done better with a listener plugged to the healthCheck call, but
+        //  for now it suffices
+
+        Utils.LOGGER.log(Level.SEVERE, "health checking not implemented");
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
+
+        ListenableFuture<PingResponse> listenableFuture = taskManagerFutureStub.healthCheck(Ping.getDefaultInstance());
+        try {
+            return listenableFuture.get();
+        } catch (ExecutionException e) {
+            Utils.LOGGER.log(Level.SEVERE, "Lower layer unavailable: " + e.getMessage());
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).setMissingLayer(MissingConnectionWithLayer.TaskManager).build();
+        } catch (Exception e) {
+            Utils.LOGGER.log(Level.SEVERE, "Unhandled exception when health checking: " + e);
+            return null;
+        }
     }
 
     @Override

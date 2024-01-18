@@ -63,8 +63,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     }
 
     @Override
-    public void internalHealthcheck() {
+    public PingResponse internalHealthcheck() {
         Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+        return PingResponse.getDefaultInstance();
     }
 
     class DoMapHandler implements Runnable {
