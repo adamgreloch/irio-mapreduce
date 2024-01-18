@@ -45,7 +45,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
 
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
         Futures.addCallback(listenableFuture, createCallback(responseObserver), pool);
@@ -58,7 +58,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
+        var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(batchManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture =
                 taskManagerFutureStub.healthCheck(request);
