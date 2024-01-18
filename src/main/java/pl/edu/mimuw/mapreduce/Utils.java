@@ -76,8 +76,10 @@ public class Utils {
 
             @Override
             public void onFailure(Throwable t) {
-                PingResponse pingResponse =
-                        PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).setMissingLayer(MissingConnectionWithLayer.BatchManager).build();
+                PingResponse pingResponse = PingResponse.newBuilder()
+                        .setStatusCode(HealthStatusCode.Error)
+                        .setMissingLayer(connectingTo)
+                        .build();
                 responseObserver.onNext(pingResponse);
                 responseObserver.onCompleted();
             }
