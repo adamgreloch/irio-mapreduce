@@ -1,4 +1,4 @@
-package pl.edu.mimuw.mapreduce.config;
+package pl.edu.mimuw.mapreduce.common;
 
 import java.io.IOException;
 import java.nio.file.Files;

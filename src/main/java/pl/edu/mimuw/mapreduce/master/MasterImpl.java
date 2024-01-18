@@ -4,10 +4,11 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
+import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
-import pl.edu.mimuw.mapreduce.config.ClusterConfig;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
@@ -17,13 +18,27 @@ import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
+import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ManagedChannel batchManagerChannel = Utils.createCustomManagedChannelBuilder(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
+    private final ManagedChannel batchManagerChannel = Utils.createCustomClientChannelBuilder(ClusterConfig.BATCH_MANAGERS_URI).executor(pool).usePlaintext().build();
+    private final HealthStatusManager health;
+
+    public MasterImpl(HealthStatusManager health) {
+        this.health = health;
+    }
+
+    public static void start() throws IOException, InterruptedException {
+        Utils.LOGGER.log(Level.INFO, "Hello from Master!");
+
+        HealthStatusManager health = new HealthStatusManager();
+
+        Utils.start_service(new MasterImpl(health), health, ClusterConfig.MASTERS_URI);
+    }
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
         return new FutureCallback<Response>() {
