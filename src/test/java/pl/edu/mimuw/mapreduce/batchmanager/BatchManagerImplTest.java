@@ -59,5 +59,6 @@ public class BatchManagerImplTest {
                         .build());
 
         assertEquals(StatusCode.Ok, response.getStatusCode());
+
     }
 }

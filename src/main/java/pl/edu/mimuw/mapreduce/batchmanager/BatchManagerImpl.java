@@ -8,6 +8,9 @@ import io.grpc.ManagedChannelBuilder;
 import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.config.ClusterConfig;
+import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.proto.batchmanager.BatchManagerGrpc;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -18,6 +21,7 @@ import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -32,6 +36,12 @@ public class BatchManagerImpl extends BatchManagerGrpc.BatchManagerImplBase {
     enum BatchPhase {
         Mapping, Reducing
     }
+
+    public static void start() throws IOException, InterruptedException {
+        Utils.start_service(new BatchManagerImpl(), ClusterConfig.BATCH_MANAGERS_PORT);
+    }
+
+    public BatchManagerImpl() {}
 
     private final AtomicInteger taskCount = new AtomicInteger(0);
     private final Map<Batch, Integer> doneTasks = new ConcurrentHashMap<>();

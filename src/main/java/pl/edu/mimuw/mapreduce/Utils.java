@@ -43,7 +43,7 @@ public class Utils {
             public void onFailure(Throwable t) {
                 PingResponse pingResponse = PingResponse.newBuilder()
                         .setStatusCode(HealthStatusCode.Error)
-                        .setMissingLayer(MissingConnectionWithLayer.BatchManager)
+                        .setMissingLayer(connectingTo)
                         .build();
                 responseObserver.onNext(pingResponse);
                 responseObserver.onCompleted();
