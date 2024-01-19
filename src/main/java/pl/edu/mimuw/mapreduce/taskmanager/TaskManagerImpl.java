@@ -30,55 +30,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-//private FutureCallback<Response> createCallback(Batch batch, StreamObserver<Response> responseObserver,
-//                                                TaskManagerGrpc.TaskManagerFutureStub taskManagerFutureStub) {
-//    return new FutureCallback<>() {
-//        /** Try to send next Task to TaskManager. */
-//        @Override
-//        public void onSuccess(Response result) {
-//            if (result.getStatusCode() != StatusCode.Ok) {
-//                Response response = Response.newBuilder().setStatusCode(result.getStatusCode()).setMessage(
-//                        "Success but got some internal error.").build();
-//                responseObserver.onNext(response);
-//                responseObserver.onCompleted();
-//                return;
-//            }
-//            // TODO check if every map was executed on input, by checking some value in storage.
-//            // If so set BatchPhase to Reducing.
-//            int doneTaskNr = doneTasks.get(batch);
-//            doneTaskNr++;
-//
-//            if (batchPhases.get(batch).equals(BatchPhase.Mapping)) {
-//                // end of mapping phase
-//                doneTasks.put(batch, 0);
-//                batchPhases.put(batch, BatchPhase.Reducing);
-//            } else {
-//                doneTasks.put(batch, doneTaskNr);
-//            }
-//
-//            Optional<Task> optional = getTask(batch);
-//            if (optional.isEmpty()) {
-//                // batch is finished
-//                responseObserver.onNext(Response.newBuilder().setStatusCode(StatusCode.Ok).build());
-//                responseObserver.onCompleted();
-//                return;
-//            }
-//
-//            ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doTask(optional.get());
-//            Futures.addCallback(listenableFuture, createCallback(batch, responseObserver, taskManagerFutureStub),
-//                    pool);
-//        }
-//
-//        /** Stop processing the batch and send error message. */
-//        @Override
-//        public void onFailure(Throwable t) {
-//            Response response =
-//                    Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(t.getMessage()).build();
-//            responseObserver.onNext(response);
-//            responseObserver.onCompleted();
-//        }
-//    };
-//}
+
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
