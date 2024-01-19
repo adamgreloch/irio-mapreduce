@@ -6,6 +6,7 @@ import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,8 +14,6 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Stream;
-
-import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
 
 
 /* NOTE: We assume that the argument-directories already exist */
@@ -57,9 +56,13 @@ public class DistrStorage implements Storage {
     @Override
     public void putFile(String dirId, long fileId, File file) {
         try {
-            Files.move(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()), ATOMIC_MOVE);
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot move file atomically");
+            var dirPath = storagePath.resolve(dirId);
+            if (!Files.exists(dirPath)) {
+                Files.createDirectory(dirPath);
+            }
+            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 

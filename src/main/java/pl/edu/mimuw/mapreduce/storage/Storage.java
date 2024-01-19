@@ -11,8 +11,7 @@ public interface Storage {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
 
     /* Reserved directory levels */
-    long BINARY_DIR = 0;
-    long MAPREDUCE_MIN = BINARY_DIR + 1;
+    String BINARY_DIR = "BINARY_0";
 
     /** Retrieves a file with id fileId from a directory dirId */
     FileRep getFile(String dirId, long fileId);
