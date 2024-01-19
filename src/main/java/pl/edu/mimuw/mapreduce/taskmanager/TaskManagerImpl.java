@@ -55,41 +55,63 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 ClusterConfig.TASK_MANAGERS_URI).awaitTermination();
     }
 
+    private void reRunTask(StreamObserver<Response> responseObserver,
+                           CountDownLatch operationsDoneLatch,
+                           Object request,
+                           int attempt,
+                           WorkerGrpc.WorkerFutureStub workerFutureStub) {
+        if (!(request instanceof DoMapRequest) && !(request instanceof DoReduceRequest)) {
+            throw new AssertionError("Object is neither an instance of DoMapRequest or DoReduceRequest");
+        }
+
+        ListenableFuture<Response> listenableFuture;
+        if (request instanceof DoMapRequest doMapRequest) {
+            listenableFuture = workerFutureStub.doMap(doMapRequest);
+        } else {
+            DoReduceRequest doReduceRequest = (DoReduceRequest) request;
+            listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+        }
+        Futures.addCallback(listenableFuture,
+                createWorkerResponseCallback(responseObserver, operationsDoneLatch, request, attempt + 1, workerFutureStub),
+                pool);
+    }
+
     private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
                                                                   CountDownLatch operationsDoneLatch,
                                                                   Object request,
                                                                   int attempt,
                                                                   WorkerGrpc.WorkerFutureStub workerFutureStub) {
-        if (!(request instanceof DoMapRequest) && !(request instanceof DoReduceRequest)) {
-            throw new AssertionError("Object is neither an instance of DoMapRequest or DoReduceRequest");
-        }
         return new FutureCallback<>() {
             @Override
             public void onSuccess(Response result) {
                 if (result.getStatusCode() == StatusCode.Err) {
-                    if(attempt > MAX_ATTEMPT){
+                    if (attempt > MAX_ATTEMPT) {
                         Utils.respondWithThrowable(new RuntimeException("Number of attempts for task was exceeded"), responseObserver);
                         return;
                     }
-                    ListenableFuture<Response> listenableFuture;
-                    if (request instanceof DoMapRequest doMapRequest) {
-                        listenableFuture = workerFutureStub.doMap(doMapRequest);
-                    } else {
-                        DoReduceRequest doReduceRequest = (DoReduceRequest) request;
-                        listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                    }
-                    Futures.addCallback(listenableFuture,
-                            createWorkerResponseCallback(responseObserver, operationsDoneLatch, request, attempt + 1, workerFutureStub),
-                            pool);
+                    reRunTask(responseObserver,
+                            operationsDoneLatch,
+                            request,
+                            attempt + 1,
+                            workerFutureStub);
                     return;
                 }
+
                 operationsDoneLatch.countDown();
             }
 
             /** Propagate error message. */
             @Override
             public void onFailure(Throwable t) {
-                Utils.respondWithThrowable(t, responseObserver);
+                if (attempt > MAX_ATTEMPT) {
+                    Utils.respondWithThrowable(t, responseObserver);
+                    return;
+                }
+                reRunTask(responseObserver,
+                        operationsDoneLatch,
+                        request,
+                        attempt + 1,
+                        workerFutureStub);
             }
         };
     }
