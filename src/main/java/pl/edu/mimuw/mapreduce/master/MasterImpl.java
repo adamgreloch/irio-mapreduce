@@ -31,6 +31,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     public MasterImpl(HealthStatusManager health, String taskManagersUri) {
         this.health = health;
+        Utils.LOGGER.log(Level.INFO, "Task managers service URI set to: " + taskManagersUri);
         this.taskManagerChannel = Utils.createCustomClientChannelBuilder(taskManagersUri).executor(pool).build();
     }
 
@@ -70,7 +71,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
         // TODO this probably can be done better with a listener plugged to the healthCheck call, but
         //  for now it suffices
 
-        Utils.LOGGER.log(Level.SEVERE, "health checking not implemented");
+        Utils.LOGGER.log(Level.FINE, "Performing healthcheck...");
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture = taskManagerFutureStub.healthCheck(Ping.getDefaultInstance());
@@ -87,6 +88,8 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        Utils.LOGGER.log(Level.FINE, "Received health check request");
+
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture =

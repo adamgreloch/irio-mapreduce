@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 public class ClusterConfig {
-    public static final boolean IS_KUBERNETES = false;
-
     public static final String WORKERS_URI = env_or("WORKERS_SERVICE_URI", "localhost:5045");
 
     public static final String TASK_MANAGERS_URI = env_or("TASKMGR_SERVICE_URI", "localhost:5044");
@@ -23,6 +21,7 @@ public class ClusterConfig {
     }
 
     static String env_or(String env, String str) {
-        return IS_KUBERNETES ? System.getenv(env) : str;
+        var res = System.getenv(env);
+        return res == null ? str : res;
     }
 }

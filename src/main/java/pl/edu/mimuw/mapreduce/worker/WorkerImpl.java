@@ -52,6 +52,8 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        Utils.LOGGER.log(Level.FINE, "Received health check request");
+
         PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
         responseObserver.onNext(pingResponse);
         responseObserver.onCompleted();

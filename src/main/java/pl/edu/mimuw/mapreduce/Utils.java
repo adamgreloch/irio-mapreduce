@@ -56,7 +56,7 @@ public class Utils {
         }
     }
 
-    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException, InterruptedException {
+    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
                 ServerBuilder.forPort(port)
@@ -97,6 +97,9 @@ public class Utils {
         return ManagedChannelBuilder.forTarget(target)
                 .defaultLoadBalancingPolicy("round_robin")
                 .defaultServiceConfig(generateHealthConfig(""))
+                // TODO probably worth enabling
+                // .enableRetry()
+                // .keepAliveTime(10, TimeUnit.SECONDS)
                 .usePlaintext();
     }
 

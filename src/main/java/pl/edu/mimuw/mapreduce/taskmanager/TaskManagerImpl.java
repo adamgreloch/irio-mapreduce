@@ -40,6 +40,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         this.health = health;
+        Utils.LOGGER.log(Level.INFO, "Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
 
@@ -79,6 +80,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        Utils.LOGGER.log(Level.FINE, "Received health check request");
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);

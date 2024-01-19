@@ -77,4 +77,32 @@ public class MasterImplTest {
         masterService.shutdownNow().awaitTermination();
     }
 
+    @Test
+    public void masterImpl_rediscoversPreviouslyInaccessibleService() throws Exception {
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
+
+        HealthStatusManager masterHealth = new HealthStatusManager();
+        var masterImpl = new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI);
+        var masterServer = Utils.start_server(masterImpl, masterHealth, ClusterConfig.MASTERS_URI);
+
+        var response = masterImpl.internalHealthcheck();
+
+        assertEquals(HealthStatusCode.Error, response.getStatusCode());
+        assertEquals(MissingConnectionWithLayer.TaskManager, response.getMissingLayer());
+
+        HealthStatusManager taskManagerHealth = new HealthStatusManager();
+        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
+                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+
+        TimeUnit.SECONDS.sleep(5);
+
+        response = masterImpl.internalHealthcheck();
+
+        assertEquals(HealthStatusCode.Error, response.getStatusCode());
+        assertEquals(MissingConnectionWithLayer.Worker, response.getMissingLayer());
+
+        taskManagerServer.shutdownNow().awaitTermination();
+        masterServer.shutdownNow().awaitTermination();
+    }
+
 }
