@@ -159,13 +159,15 @@ public class Utils {
             Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
         }
     }
-
-    public static void handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
+    //Returns true if response was made.
+    public static boolean handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
         handlePayload(payload);
         if (payload.getAction() == Action.FAIL_ALWAYS) {
             Utils.respondToHealthCheckUnhealthy(responseObserver);
+            return true;
         }
+        return false;
     }
 
     // Returns true if we should fail internalHealthckeck

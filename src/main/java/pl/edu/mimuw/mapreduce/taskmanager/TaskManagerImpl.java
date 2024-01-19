@@ -82,8 +82,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+            return;
+        }
         Utils.LOGGER.trace("Received health check request");
-        Utils.handleServerBreakerHealthCheckAction(responseObserver);
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);

@@ -54,7 +54,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        Utils.handleServerBreakerHealthCheckAction(responseObserver);
+        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+            return;
+        }
         Utils.LOGGER.trace("Received health check request");
         Utils.respondToHealthcheck(responseObserver);
     }
