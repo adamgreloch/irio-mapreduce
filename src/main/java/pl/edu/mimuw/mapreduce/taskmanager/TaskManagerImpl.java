@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
+import jdk.jshell.execution.Util;
 import org.apache.commons.io.IOUtils;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
@@ -13,6 +14,7 @@ import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.*;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -74,11 +76,15 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new Handler(batch, responseObserver));
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+            return;
+        }
         Utils.LOGGER.trace("Received health check request");
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -90,6 +96,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public PingResponse internalHealthcheck() {
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         Utils.LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
