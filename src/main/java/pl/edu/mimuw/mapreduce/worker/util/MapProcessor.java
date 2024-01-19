@@ -6,36 +6,20 @@ import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.*;
 
-public class ConcurrentMapProcessor implements AutoCloseable {
-    private final String dataDir;
-    private final String destDirId;
-    private final ConcurrentHashMap<Long, File> binaries;
-    private final List<Long> binIds;
-    private final String tempDir;
-    private final Storage storage;
+public class MapProcessor extends TaskProcessor {
     private final Split split;
-
     private static final ExecutorService pool = Executors.newCachedThreadPool();
 
-    public ConcurrentMapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
-                                  String destDirId) throws IOException {
-        this.dataDir = dataDir;
-        this.destDirId = destDirId;
+    public MapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
+                        String destDirId) throws IOException {
+        super(storage, binIds, dataDir, destDirId);
         this.split = split;
-        this.storage = storage;
-        this.tempDir = Files.createTempDirectory("processor_" + dataDir + "_" + split.getBeg() +
-                "_" + split.getEnd()).toFile().getAbsolutePath();
-        this.binaries = new ConcurrentHashMap<>();
-        this.binIds = binIds;
-        for (var binId : binIds)
-            this.binaries.put(binId, storage.getFile(String.valueOf(Storage.BINARY_DIR), binId).file());
     }
 
     public void map() throws ExecutionException, InterruptedException {
@@ -46,12 +30,6 @@ public class ConcurrentMapProcessor implements AutoCloseable {
         }
         for (var future : futures)
             future.get();
-    }
-
-    @Override
-    public void close() throws IOException {
-        for (var binary : binaries.values())
-            Files.delete(binary.toPath().toAbsolutePath());
     }
 
     private class FileProcessor implements Callable<Void> {
@@ -88,7 +66,7 @@ public class ConcurrentMapProcessor implements AutoCloseable {
                 i++;
             }
 
-            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) binaryCount]);
+            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (binaryCount % 2)]);
             return null;
         }
     }

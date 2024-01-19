@@ -135,4 +135,10 @@ public class Utils {
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
+
+    public static void respondToHealthcheck(StreamObserver<PingResponse> responseObserver) {
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
+        responseObserver.onNext(pingResponse);
+        responseObserver.onCompleted();
+    }
 }

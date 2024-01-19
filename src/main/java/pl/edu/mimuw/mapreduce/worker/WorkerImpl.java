@@ -8,7 +8,9 @@ import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
-import pl.edu.mimuw.mapreduce.worker.util.ConcurrentMapProcessor;
+import pl.edu.mimuw.mapreduce.worker.util.Either;
+import pl.edu.mimuw.mapreduce.worker.util.MapProcessor;
+import pl.edu.mimuw.mapreduce.worker.util.ReduceProcessor;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
@@ -46,88 +48,72 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
-        pool.execute(new DoMapHandler(request, responseObserver));
+        pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
         Utils.LOGGER.trace("Received health check request");
-
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
-        responseObserver.onNext(pingResponse);
-        responseObserver.onCompleted();
+        Utils.respondToHealthcheck(responseObserver);
     }
 
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
-        pool.execute(new DoReduceHandler(request, responseObserver));
+        pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 
     @Override
     public PingResponse internalHealthcheck() {
-        Utils.LOGGER.warn("healthchecking not implemented");
-        return PingResponse.getDefaultInstance();
+        // TODO perform filesystem access check
+        return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
     }
 
-    class DoMapHandler implements Runnable {
-        private final DoMapRequest request;
+    class RequestHandler implements Runnable {
+        private final Either<DoMapRequest, DoReduceRequest> eitherMapOrReduce;
         private final StreamObserver<Response> responseObserver;
 
-        DoMapHandler(DoMapRequest request, StreamObserver<Response> responseObserver) {
-            this.request = request;
+        RequestHandler(Either<DoMapRequest, DoReduceRequest> eitherMapOrReduce, StreamObserver<Response> responseObserver) {
+            this.eitherMapOrReduce = eitherMapOrReduce;
             this.responseObserver = responseObserver;
         }
 
-        public void run() {
-            health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
+        private void processMap(DoMapRequest request) {
             var split = request.getSplit();
             var task = request.getTask();
 
-            try (var processor = new ConcurrentMapProcessor(storage, split, task.getTaskBinIdsList(),
+            try (var processor = new MapProcessor(storage, split, task.getTaskBinIdsList(),
                     task.getInputDirId(), task.getDestDirId())) {
+                if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
-                Utils.LOGGER.trace("performing map");
-
-                if (task.getTaskType() != Map) throw new RuntimeException("bad task type");
-
+                Utils.LOGGER.trace("Performing map");
                 processor.map();
+
+                Utils.respondWithSuccess(responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             }
-
-            Utils.respondWithSuccess(responseObserver);
-            health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
-    }
 
-    class DoReduceHandler implements Runnable {
-        private final DoReduceRequest request;
-        private final StreamObserver<Response> responseObserver;
+        public void processReduce(DoReduceRequest request) {
+            var file = request.getFileId();
+            var task = request.getTask();
 
-        DoReduceHandler(DoReduceRequest request, StreamObserver<Response> responseObserver) {
-            this.request = request;
-            this.responseObserver = responseObserver;
+            try (var processor = new ReduceProcessor(storage, file, task.getTaskBinIdsList(),
+                    task.getInputDirId(), task.getDestDirId())) {
+                if (task.getTaskType() != Reduce) throw new RuntimeException("Bad task type");
+
+                Utils.LOGGER.trace("Performing reduce");
+                processor.reduce();
+
+                Utils.respondWithSuccess(responseObserver);
+            } catch (Exception e) {
+                Utils.respondWithThrowable(e, responseObserver);
+            }
         }
 
         public void run() {
             health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
-            var file = request.getFileId();
-            var task = request.getTask();
-
-            try {
-                if (task.getTaskType() != Reduce) throw new RuntimeException("bad task type");
-
-                Utils.LOGGER.trace("performing reduce");
-
-                // TODO perform reduce
-
-                Utils.LOGGER.trace("reducing todo");
-
-            } catch (Exception e) {
-                Utils.respondWithThrowable(e, responseObserver);
-            }
-
-            Utils.respondWithSuccess(responseObserver);
+            eitherMapOrReduce.apply(this::processMap, this::processReduce);
             health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
     }
