@@ -12,6 +12,7 @@ import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
@@ -56,13 +57,14 @@ public class Utils {
         }
     }
 
-    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException {
+    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, ServerBreakerImpl serverBreaker, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
                 ServerBuilder.forPort(port)
                         .addService(service)
                         .addService(ProtoReflectionService.newInstance())
                         .addService(health.getHealthService())
+                        .addService(serverBreaker)
                         .build();
 
         server.start();

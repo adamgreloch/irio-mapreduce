@@ -9,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
@@ -16,6 +17,7 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.processbreaker.Serverbreaker;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
@@ -27,19 +29,22 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel taskManagerChannel;
     private final HealthStatusManager health;
+    private final ServerBreakerImpl serverBreaker;
 
-    public MasterImpl(HealthStatusManager health, String taskManagersUri) {
+    public MasterImpl(HealthStatusManager health, String taskManagersUri, ServerBreakerImpl serverBreaker) {
         this.health = health;
         Utils.LOGGER.info("Task managers service URI set to: " + taskManagersUri);
         this.taskManagerChannel = Utils.createCustomClientChannelBuilder(taskManagersUri).executor(pool).build();
+        this.serverBreaker = serverBreaker;
     }
 
     public static void start() throws IOException, InterruptedException {
         Utils.LOGGER.info("Hello from Master!");
 
         HealthStatusManager health = new HealthStatusManager();
+        ServerBreakerImpl serverBreaker = new ServerBreakerImpl();
 
-        Utils.start_server(new MasterImpl(health, ClusterConfig.TASK_MANAGERS_URI), health,
+        Utils.start_server(new MasterImpl(health, ClusterConfig.TASK_MANAGERS_URI, serverBreaker), health, serverBreaker,
                 ClusterConfig.MASTERS_URI).awaitTermination();
     }
 
