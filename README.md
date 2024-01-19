@@ -1,8 +1,8 @@
+<img src="./design.png" width="400">
+
 # edi-mapreduce
 
 Kubernetes-based distributed MapReduce system.
-
-![design](./design.png)
 
 ## Assumptions
 
