@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package processbreaker;
+
+option java_package = "pl.edu.mimuw.proto.processbreaker";
+option java_multiple_files = true;
+
+import "common/common.proto";
+
+// Service responsible for breaking the containing server for debugging purposes
+service ServerBreaker {
+  rpc ExecutePayload(Payload) returns (common.Response) {}
+}
+
+message Payload {
+  enum Action {
+    KILL = 0; // kills a process (i.e. throws an exception)
+    HANG = 1; // hangs a process indefinitely (RPCs are never completed)
+    TIMEOUT = 2; // hangs a process for a specified time in param
+    FAIL_ALWAYS = 3; // always returns responses with errors
+  }
+  Action action = 1;
+  uint64 param = 2;
+}
+
+
