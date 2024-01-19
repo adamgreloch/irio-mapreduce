@@ -177,7 +177,7 @@ public class Utils {
 
     private static void handlePayload(Payload payload){
         switch (payload.getAction()) {
-            case KILL -> System.exit(0);
+            case KILL -> System.exit(1);
             case HANG -> {
                 while (true) {
                     try {
