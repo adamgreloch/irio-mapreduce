@@ -1,10 +1,13 @@
 # edi-mapreduce
 
+Kubernetes-based distributed MapReduce system.
+
+![design](./design.png)
+
 ## Assumptions
 
 Not following these assumptions leads to disaster, make sure your binaries
 strictly follow these. We assume that the client provides the following binaries:
-
 
 ### Map binary
 ```
