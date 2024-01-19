@@ -1,0 +1,7 @@
+{
+  "map_bin_ids": [123, 456, 789],
+  "partition_bin_id": 987,
+  "reduce_bin_ids": [321, 654, 987],
+  "input_id": "data_range_123",
+  "final_dest_dir_id": "results_directory_456"
+}

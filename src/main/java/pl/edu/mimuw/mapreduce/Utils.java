@@ -201,14 +201,4 @@ public class Utils {
             }
         }
     }
-
-    public static Optional<Batch> batchFromJson(String json) {
-        var batchBuilder = Batch.newBuilder();
-        try {
-            JsonFormat.parser().ignoringUnknownFields().merge(json, batchBuilder);
-            return Optional.of(batchBuilder.build());
-        } catch (Exception e) {
-            return Optional.empty();
-        }
-    }
 }
