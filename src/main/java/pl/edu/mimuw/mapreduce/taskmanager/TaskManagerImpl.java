@@ -29,7 +29,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.logging.Level;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     private final Storage storage;
@@ -40,12 +39,12 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         this.health = health;
-        Utils.LOGGER.log(Level.INFO, "Worker service URI set to: " + workersUri);
+        Utils.LOGGER.info("Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.log(Level.INFO, "Hello from TaskManager!");
+        Utils.LOGGER.info("Hello from TaskManager!");
 
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
@@ -80,7 +79,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        Utils.LOGGER.log(Level.FINE, "Received health check request");
+        Utils.LOGGER.trace("Received health check request");
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);
@@ -91,7 +90,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public PingResponse internalHealthcheck() {
-        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+        Utils.LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
 

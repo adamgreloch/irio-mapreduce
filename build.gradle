@@ -48,6 +48,9 @@ allprojects {
                 // examples/advanced need this for JsonFormat
                 implementation "com.google.protobuf:protobuf-java-util:${protobufVersion}"
 
+                implementation "ch.qos.logback:logback-classic:1.3.8"
+                implementation 'com.google.cloud:google-cloud-logging-logback:0.130.30-alpha'
+
                 runtimeOnly "io.grpc:grpc-netty-shaded:${grpcVersion}"
 
                 testImplementation "io.grpc:grpc-testing:${grpcVersion}"

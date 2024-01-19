@@ -9,6 +9,8 @@ import io.grpc.health.v1.HealthCheckResponse.ServingStatus;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.protobuf.services.ProtoReflectionService;
 import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
@@ -20,11 +22,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class Utils {
-    public static final Logger LOGGER = Logger.getLogger(Utils.class.getName());
+    public static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
 
     static class HealthCheckThread<S extends BindableService & HealthCheckable> extends Thread {
         private final S service;
@@ -37,20 +37,20 @@ public class Utils {
 
         public void run() {
             while (true) {
-                Utils.LOGGER.log(Level.FINE, "Performing periodic healthcheck...");
+                Utils.LOGGER.trace("Performing periodic healthcheck...");
 
                 var response = service.internalHealthcheck();
                 if (response.getStatusCode() == HealthStatusCode.Healthy) {
-                    Utils.LOGGER.log(Level.FINE, "Service is healthy");
+                    Utils.LOGGER.trace("Service is healthy");
                     health.setStatus("", ServingStatus.SERVING);
                 } else {
-                    Utils.LOGGER.log(Level.WARNING, "Service is unhealthy! " + response);
+                    Utils.LOGGER.warn("Service is unhealthy! " + response);
                     health.setStatus("", ServingStatus.NOT_SERVING);
                 }
                 try {
                     TimeUnit.SECONDS.sleep(10);
                 } catch (InterruptedException e) {
-                    Utils.LOGGER.log(Level.SEVERE, "Health checking interrupted: " + e.getMessage());
+                    Utils.LOGGER.error("Health checking interrupted: " + e.getMessage());
                 }
             }
         }
@@ -70,13 +70,12 @@ public class Utils {
         // https://grpc.io/docs/guides/health-checking/
         health.setStatus("", ServingStatus.SERVING);
 
-        Utils.LOGGER.log(Level.INFO,
-                "Started service " + service.getClass().getSimpleName() + " on port " + server.getPort());
+        Utils.LOGGER.info("Started service " + service.getClass().getSimpleName() + " on port " + server.getPort());
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            Utils.LOGGER.log(Level.INFO, "Received shutdown request");
+            Utils.LOGGER.info("Received shutdown request");
             server.shutdown();
-            Utils.LOGGER.log(Level.INFO, "Successfully stopped the server");
+            Utils.LOGGER.info("Successfully stopped the server");
         }));
 
         (new HealthCheckThread<>(service, health)).start();
@@ -124,14 +123,14 @@ public class Utils {
     }
 
     public static void respondWithThrowable(Throwable e, StreamObserver<Response> responseObserver) {
-        Utils.LOGGER.log(Level.SEVERE, "RPC request failed with: " + e.getMessage());
+        Utils.LOGGER.trace("RPC request failed with: " + e.getMessage());
         var response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
 
     public static void respondWithSuccess(StreamObserver<Response> responseObserver) {
-        Utils.LOGGER.log(Level.FINE, "RPC request succeeded");
+        Utils.LOGGER.trace("RPC request succeeded");
         var response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();

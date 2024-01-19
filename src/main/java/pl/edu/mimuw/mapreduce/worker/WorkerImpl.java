@@ -20,7 +20,6 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Level;
 
 import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
@@ -31,7 +30,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     private final HealthStatusManager health;
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.log(Level.INFO, "Hello from Worker!");
+        Utils.LOGGER.info("Hello from Worker!");
 
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
@@ -52,7 +51,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        Utils.LOGGER.log(Level.FINE, "Received health check request");
+        Utils.LOGGER.trace("Received health check request");
 
         PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
         responseObserver.onNext(pingResponse);
@@ -66,7 +65,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public PingResponse internalHealthcheck() {
-        Utils.LOGGER.log(Level.SEVERE, "healthchecking not implemented");
+        Utils.LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
 
@@ -87,7 +86,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             try (var processor = new ConcurrentMapProcessor(storage, split, task.getTaskBinIdsList(),
                     task.getInputDirId(), task.getDestDirId())) {
 
-                Utils.LOGGER.log(Level.FINE, "performing map");
+                Utils.LOGGER.trace("performing map");
 
                 if (task.getTaskType() != Map) throw new RuntimeException("bad task type");
 
@@ -118,11 +117,11 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             try {
                 if (task.getTaskType() != Reduce) throw new RuntimeException("bad task type");
 
-                Utils.LOGGER.log(Level.FINE, "performing reduce");
+                Utils.LOGGER.trace("performing reduce");
 
                 // TODO perform reduce
 
-                Utils.LOGGER.log(Level.WARNING, "reducing todo");
+                Utils.LOGGER.trace("reducing todo");
 
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);

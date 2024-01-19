@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.logging.Level;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
@@ -31,12 +30,12 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     public MasterImpl(HealthStatusManager health, String taskManagersUri) {
         this.health = health;
-        Utils.LOGGER.log(Level.INFO, "Task managers service URI set to: " + taskManagersUri);
+        Utils.LOGGER.info("Task managers service URI set to: " + taskManagersUri);
         this.taskManagerChannel = Utils.createCustomClientChannelBuilder(taskManagersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.log(Level.INFO, "Hello from Master!");
+        Utils.LOGGER.info("Hello from Master!");
 
         HealthStatusManager health = new HealthStatusManager();
 
@@ -71,24 +70,24 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
         // TODO this probably can be done better with a listener plugged to the healthCheck call, but
         //  for now it suffices
 
-        Utils.LOGGER.log(Level.FINE, "Performing healthcheck...");
+        Utils.LOGGER.trace("Performing healthcheck...");
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<PingResponse> listenableFuture = taskManagerFutureStub.healthCheck(Ping.getDefaultInstance());
         try {
             return listenableFuture.get();
         } catch (ExecutionException e) {
-            Utils.LOGGER.log(Level.SEVERE, "Lower layer unavailable: " + e.getMessage());
+            Utils.LOGGER.warn("Lower layer unavailable: " + e.getMessage());
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).setMissingLayer(MissingConnectionWithLayer.TaskManager).build();
         } catch (Exception e) {
-            Utils.LOGGER.log(Level.SEVERE, "Unhandled exception when health checking: " + e);
+            Utils.LOGGER.error("Unhandled exception when health checking: " + e);
             return null;
         }
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        Utils.LOGGER.log(Level.FINE, "Received health check request");
+        Utils.LOGGER.trace("Received health check request");
 
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
