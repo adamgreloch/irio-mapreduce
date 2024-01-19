@@ -16,12 +16,10 @@ void partitionFunction(int R, const std::string &inputFilePath,
 
   // Create output files for each partition
   std::vector<std::ofstream> partitionFiles;
-  partitionFiles.reserve(R);
   for (int i = 0; i < R; ++i) {
-    std::stringstream ss;
-    ss << std::setw(2) << std::setfill('0') << i; // zero-padded file numbers
-    std::string outputPath = outputDirectory + "/" + std::to_string(i) + ".dat";
-    partitionFiles.emplace_back(outputPath);
+    std::string outputPath = outputDirectory + "/" + std::to_string(i);
+    // Files must be open in _append_ mode!
+    partitionFiles.emplace_back(outputPath, std::ios::app);
   }
 
   std::hash<std::string> hashFunction;

@@ -16,6 +16,7 @@ import java.util.concurrent.*;
 public class MapProcessor extends TaskProcessor {
     private final Split split;
     private static final ExecutorService pool = Executors.newCachedThreadPool();
+    private final Semaphore mutex = new Semaphore(1);
 
     public MapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
                         String destDirId) throws IOException {
@@ -44,8 +45,8 @@ public class MapProcessor extends TaskProcessor {
 
         @Override
         public Void call() throws IOException, InterruptedException {
-            var inputFile = fr.file();
-            var outputFile = Files.createFile(tempDir.resolve(String.valueOf(fr.id()))).toFile();
+            var inputFile = copyInputFileToTempDir(fr);
+            var outputFile = Files.createFile(tempDir.resolve(fr.id() + "_2")).toFile();
             var files = new File[]{inputFile, outputFile};
             var pb = new ProcessBuilder();
             var i = 0;
@@ -61,17 +62,20 @@ public class MapProcessor extends TaskProcessor {
                             "-R", "1", // TODO
                             "-i", inputPath,
                             "-o", outputPath);
+                    mutex.acquire();
+                    pb.inheritIO().start().waitFor();
+                    mutex.release();
                 } else {
                     outputPath = files[1 - i % 2].getAbsolutePath();
                     pb.command(binary,
                             "-i", inputPath,
                             "-o", outputPath);
+                    pb.inheritIO().start().waitFor();
                 }
-                pb.inheritIO().start().waitFor();
                 i++;
             }
 
-            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (1 - binaryCount % 2)]);
+//            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (1 - binaryCount % 2)]);
             return null;
         }
     }

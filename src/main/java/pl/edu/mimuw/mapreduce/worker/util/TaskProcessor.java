@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 
 import java.io.File;
@@ -27,7 +28,11 @@ public abstract class TaskProcessor implements AutoCloseable {
         this.binaries = new ConcurrentHashMap<>();
         this.binIds = binIds;
         for (var binId : binIds)
-            this.binaries.put(binId, storage.getFile(String.valueOf(Storage.BINARY_DIR), binId).file());
+            this.binaries.put(binId, storage.getFile(Storage.BINARY_DIR, binId).file());
+    }
+
+    public File copyInputFileToTempDir(FileRep fr) throws IOException {
+        return Files.copy(fr.file().toPath(), tempDir.resolve(String.valueOf(fr.id()))).toFile();
     }
 
     @Override

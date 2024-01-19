@@ -19,9 +19,15 @@ import java.util.stream.Stream;
 /* NOTE: We assume that the argument-directories already exist */
 public class DistrStorage implements Storage {
     private final Path storagePath;
+    private Path tmpStorage;
 
     public DistrStorage(String storagePathString) {
         this.storagePath = Paths.get(storagePathString);
+        try {
+            this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public Path getStoragePath() {
@@ -36,7 +42,14 @@ public class DistrStorage implements Storage {
         if (!file.exists()) {
             throw new IllegalStateException("File does not exist: " + file);
         }
-        return new LocalFileRep(file, fileId);
+        File fileCopy;
+        try {
+            fileCopy = Files.copy(file.toPath(), Paths.get((tmpStorage.resolve(dirPath).resolve(filePath)).toString()))
+                            .toFile();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return new LocalFileRep(fileCopy, fileId);
     }
 
     @Override
@@ -44,6 +57,11 @@ public class DistrStorage implements Storage {
         File file = new File(path.toString());
         if (!file.exists()) {
             throw new IllegalStateException("File does not exist: " + file);
+        }
+        try {
+            Files.copy(file.toPath(), Paths.get((tmpStorage.resolve(path)).toString()));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
         return new LocalFileRep(file, Long.parseLong(path.getFileName().toString()));
     }
@@ -54,12 +72,21 @@ public class DistrStorage implements Storage {
     }
 
     @Override
+    public void createDir(String dirId) {
+        var dirPath = storagePath.resolve(dirId);
+        if (!Files.exists(dirPath)) {
+            try {
+                Files.createDirectory(dirPath);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    @Override
     public void putFile(String dirId, long fileId, File file) {
         try {
-            var dirPath = storagePath.resolve(dirId);
-            if (!Files.exists(dirPath)) {
-                Files.createDirectory(dirPath);
-            }
+            createDir(dirId);
             Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()));
         } catch (IOException e) {
             throw new RuntimeException(e);

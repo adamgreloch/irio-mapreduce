@@ -14,11 +14,14 @@ import pl.edu.mimuw.proto.common.Split;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.worker.DoMapRequest;
+import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
+import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -62,33 +65,39 @@ public class WorkerImplTest {
 
     }
 
+    void writeInputFileWithId(Path dataDir, String id, String content) throws IOException {
+        var buf = new BufferedWriter(new FileWriter(dataDir.resolve(id).toString()));
+        buf.write(content);
+        buf.close();
+    }
+
+    void loadBinaryFromResource(String resourceName, long binId) throws IOException, URISyntaxException {
+        var path = getClass().getClassLoader().getResource(resourceName);
+        if (path == null) throw new IOException("no test binary!");
+        File binary = new File(path.toURI());
+        storage.putFile(Storage.BINARY_DIR, binId, binary);
+    }
+
+    String readOutputFromFile(Path dirPath, long fileId) throws FileNotFoundException {
+        var buf = new BufferedReader(new FileReader(dirPath.resolve(String.valueOf(fileId)).toString()));
+        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+    }
+
     @Test
-    public void workerImpl_correctlyDoesMap() throws Exception {
+    public void workerImpl_correctlyDoesATask() throws Exception {
+        loadBinaryFromResource("map", 0);
+        loadBinaryFromResource("partition", 1);
+        loadBinaryFromResource("reduce", 2);
 
-        var mapPath = getClass().getClassLoader().getResource("map");
-        if (mapPath == null) throw new IOException("no test binary!");
-        File mapBinary = new File(mapPath.toURI());
+        storage.createDir("0");
+        var dataDirPath = storage.getDirPath("0");
 
-        var partitionPath = getClass().getClassLoader().getResource("partition");
-        if (partitionPath == null) throw new IOException("no test binary!");
-        File partitionBinary = new File(partitionPath.toURI());
-
-        storage.putFile(Storage.BINARY_DIR, 0, mapBinary);
-        storage.putFile(Storage.BINARY_DIR, 1, partitionBinary);
-
-        var dataDirPath = Files.createDirectory(tempDirPath.resolve("0"));
-
-        var mapInput1Str = "a a a a a b b b b";
-        var mapInput1 = new BufferedWriter(new FileWriter(dataDirPath.resolve("1").toString()));
-        mapInput1.write(mapInput1Str);
-        mapInput1.close();
-
-        var mapInput2Str = "a a b b b c c c";
-        var mapInput2 = new BufferedWriter(new FileWriter(dataDirPath.resolve("2").toString()));
-        mapInput2.write(mapInput2Str);
-        mapInput2.close();
+        writeInputFileWithId(dataDirPath, "0", "a b c");
+        writeInputFileWithId(dataDirPath, "1", "a b c");
 
         var taskBinIds = List.of(0L, 1L);
+
+        storage.createDir("1");
 
         var task = Task.newBuilder()
                        .setTaskId(0)
@@ -98,7 +107,7 @@ public class WorkerImplTest {
                        .addAllTaskBinIds(taskBinIds)
                        .build();
 
-        var split = Split.newBuilder().setBeg(1).setEnd(2).build();
+        var split = Split.newBuilder().setBeg(0).setEnd(1).build();
 
         var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
 
@@ -107,32 +116,38 @@ public class WorkerImplTest {
         assertEquals(StatusCode.Ok, response.getStatusCode());
 
         var destDirDirPath = tempDirPath.resolve("1");
-        var partitionOutput1 = new BufferedReader(new FileReader(destDirDirPath.resolve("1").toString()));
-        var partitionOutput1Content = partitionOutput1.lines().collect(Collectors.joining(System.lineSeparator()));
+        var output = readOutputFromFile(destDirDirPath, 0);
+
         assertEquals("""
                 a 1
-                a 1
-                a 1
-                a 1
-                a 1
-                b 1
-                b 1
-                b 1
-                b 1""", partitionOutput1Content);
-
-        var partitionOutput2 = new BufferedReader(new FileReader(destDirDirPath.resolve("2").toString()));
-        var partitionOutput2Content = partitionOutput2.lines().collect(Collectors.joining(System.lineSeparator()));
-        assertEquals("""
-                a 1
-                a 1
-                b 1
-                b 1
                 b 1
                 c 1
-                c 1
-                c 1""", partitionOutput2Content);
+                a 1
+                b 1
+                c 1""", output);
 
+        storage.createDir("2");
+
+        task = Task.newBuilder()
+                   .setTaskId(1)
+                   .setTaskType(Task.TaskType.Reduce)
+                   .setInputDirId("1")
+                   .setDestDirId("2")
+                   .addAllTaskBinIds(Collections.singleton(2L))
+                   .build();
+
+        var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(0).build();
+
+        response = blockingStub.doReduce(doReduceRequest);
         System.out.println(response);
+
+        destDirDirPath = tempDirPath.resolve("2");
+        output = readOutputFromFile(destDirDirPath, 0);
+
+        assertEquals("""
+                a 2
+                b 2
+                c 2""", output);
     }
 
     @AfterAll

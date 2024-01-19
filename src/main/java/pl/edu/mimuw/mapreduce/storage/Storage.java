@@ -20,6 +20,8 @@ public interface Storage {
 
     Path getDirPath(String dirId);
 
+    void createDir(String dirId);
+
     /** Puts a file with id fileId to a directory dirId */
     void putFile(String dirId, long fileId, File file);
 

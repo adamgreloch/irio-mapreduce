@@ -2,7 +2,9 @@
 
 ## Assumptions
 
-Client provides the following binaries:
+Not following these assumptions leads to disaster, make sure your binaries
+strictly follow these. We assume that the client provides the following binaries:
+
 
 ### Map binary
 ```
@@ -15,7 +17,12 @@ contents and saves it to the output file specified by path
 ```
 ./partition -R <R-param> -i <input_file_path> -o <output_directory>
 ```
-Behaviour: deterministically partitions the input file into R partitions
+
+Behaviour: deterministically partitions the input file into R partitions.
+**Appends** (!) resulting partitions to already existing files in the output
+directory.
+
+You can assume that files in the output directory are not accessed concurrently.
 
 ### Reduce
 ```
@@ -24,7 +31,7 @@ Behaviour: deterministically partitions the input file into R partitions
 Behaviour: reduces all (k, value) pairs for k = key into one (key, new_value)
 where new_value is an aggregate of all values from pairs.
 
-Input files do not need to be sorted, but there is a guarantee that 
+Input files do not need to be sorted. There is a guarantee that 
 all values for a given key are in the input file.
 
 ## Build

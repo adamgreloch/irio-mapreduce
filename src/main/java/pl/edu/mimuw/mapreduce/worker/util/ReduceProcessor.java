@@ -18,8 +18,9 @@ public class ReduceProcessor extends TaskProcessor {
     }
 
     public void reduce() throws ExecutionException, InterruptedException, IOException {
-        var inputFile = storage.getFile(dataDir, fileId).file();
-        var outputFile = Files.createFile(tempDir.resolve(String.valueOf(inputFile))).toFile();
+        var fr = storage.getFile(dataDir, fileId);
+        var inputFile = copyInputFileToTempDir(fr);
+        var outputFile = Files.createFile(tempDir.resolve(fr.id() + "_2")).toFile();
         var files = new File[]{inputFile, outputFile};
 
         var pb = new ProcessBuilder();
@@ -32,8 +33,8 @@ public class ReduceProcessor extends TaskProcessor {
             String outputPath = files[1 - i % 2].getAbsolutePath();
 
             pb.command(binary,
-                    "-i " + inputPath,
-                    "-o " + outputPath);
+                    "-i", inputPath,
+                    "-o", outputPath);
 
             pb.start().waitFor();
 
