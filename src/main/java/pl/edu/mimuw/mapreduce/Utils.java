@@ -57,14 +57,14 @@ public class Utils {
         }
     }
 
-    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, ServerBreakerImpl serverBreaker, String target) throws IOException {
+    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
                 ServerBuilder.forPort(port)
                         .addService(service)
                         .addService(ProtoReflectionService.newInstance())
                         .addService(health.getHealthService())
-                        .addService(serverBreaker)
+                        .addService(ServerBreakerImpl.getInstance())
                         .build();
 
         server.start();
