@@ -6,6 +6,7 @@ import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -44,7 +45,7 @@ public class MapProcessor extends TaskProcessor {
         @Override
         public Void call() throws IOException, InterruptedException {
             var inputFile = fr.file();
-            var outputFile = new File(tempDir, String.valueOf(fr.id()));
+            var outputFile = Files.createFile(tempDir.resolve(String.valueOf(fr.id()))).toFile();
             var files = new File[]{inputFile, outputFile};
             var pb = new ProcessBuilder();
             var i = 0;
@@ -56,17 +57,21 @@ public class MapProcessor extends TaskProcessor {
                 if (i == binaryCount - 1) {
                     // Partition phase. The output path is just a destination directory
                     outputPath = storage.getDirPath(String.valueOf(destDirId)).toAbsolutePath().toString();
+                    pb.command(binary,
+                            "-R", "1", // TODO
+                            "-i", inputPath,
+                            "-o", outputPath);
                 } else {
                     outputPath = files[1 - i % 2].getAbsolutePath();
+                    pb.command(binary,
+                            "-i", inputPath,
+                            "-o", outputPath);
                 }
-                pb.command(binary,
-                        "-i " + inputPath,
-                        "-o " + outputPath);
-                pb.start().waitFor();
+                pb.inheritIO().start().waitFor();
                 i++;
             }
 
-            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (binaryCount % 2)]);
+            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (1 - binaryCount % 2)]);
             return null;
         }
     }

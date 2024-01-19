@@ -4,6 +4,7 @@ import pl.edu.mimuw.mapreduce.storage.Storage;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -18,7 +19,7 @@ public class ReduceProcessor extends TaskProcessor {
 
     public void reduce() throws ExecutionException, InterruptedException, IOException {
         var inputFile = storage.getFile(dataDir, fileId).file();
-        var outputFile = new File(tempDir, String.valueOf(fileId));
+        var outputFile = Files.createFile(tempDir.resolve(String.valueOf(inputFile))).toFile();
         var files = new File[]{inputFile, outputFile};
 
         var pb = new ProcessBuilder();

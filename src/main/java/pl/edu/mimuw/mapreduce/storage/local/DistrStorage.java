@@ -34,7 +34,7 @@ public class DistrStorage implements Storage {
         Path filePath = dirPath.resolve(String.valueOf(fileId));
         File file = new File(filePath.toString());
         if (!file.exists()) {
-            throw new IllegalStateException("File does not exist");
+            throw new IllegalStateException("File does not exist: " + file);
         }
         return new LocalFileRep(file, fileId);
     }
@@ -43,7 +43,7 @@ public class DistrStorage implements Storage {
     public FileRep getFile(Path path) {
         File file = new File(path.toString());
         if (!file.exists()) {
-            throw new IllegalStateException("File does not exist");
+            throw new IllegalStateException("File does not exist: " + file);
         }
         return new LocalFileRep(file, Long.parseLong(path.getFileName().toString()));
     }
@@ -72,7 +72,7 @@ public class DistrStorage implements Storage {
         try (Stream<Path> files = Files.list(Paths.get(dirId))) {
             length = files.count();
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot count files");
+            throw new IllegalStateException("Cannot count files in dir: " + dirId);
         }
         return length;
     }
