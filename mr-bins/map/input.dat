@@ -1,0 +1,20 @@
+Niestety funkcja phfwdReverse nie wyznacza przeciwobrazu funkcji phfwdGet. Jeśli
+phfwdGet(x) = y, to x należy do wyniku phfwdReverse(y). Implikacja w drugą
+stronę nie zachodzi. Należy zaimplementować funkcję PhoneNumbers *
+phfwdGetReverse(PhoneForward const *pf, char const *num); która dla podanej za
+pomocą wskaźnika pf bazy przekierowań i podanego numeru telefonu num wyznacza
+posortowaną leksykograficznie listę wszystkich takich numerów telefonów i tylko
+takich numerów telefonów x, że phfwdGet(x) = num. Funkcja ta alokuje strukturę
+PhoneNumbers, która musi być zwolniona za pomocą funkcji phnumDelete. Wynikiem
+funkcji jest NULL, gdy nie udało się alokować pamięci. Jeśli podany napis num
+nie reprezentuje numeru, wynikiem jest pusty ciąg. Należy w następujący sposób
+ujednolicić reakcję na parametr o wartości NULL. Wynik funkcji phfwdAdd jest
+false, gdy parametr pf ma wartość NULL. Funkcje phfwdDelete, phfwdRemove nic nie
+robią, gdy parametr pf ma wartość NULL. Wynik funkcji phfwdGet, phfwdGetReverse,
+phfwdReverse jest NULL, gdy parametr pf ma wartość NULL. Funkcja phnumDelete nic
+nie robi, gdy parametr pnum ma wartość NULL. Wynik funkcji phnumGet jest NULL,
+gdy parametr pnum ma wartość NULL. Należy poprawić i uzupełnić dokumentację, aby
+opisywała faktyczne działanie poszczególnych operacji. W szczególności należy
+uwzględnić wyjaśnienia, które pojawiły się lub pojawią się na forum. Ponadto w
+trzeciej części zadania oczekujemy poprawienia ewentualnych błędów z poprzednich
+części zadania.
