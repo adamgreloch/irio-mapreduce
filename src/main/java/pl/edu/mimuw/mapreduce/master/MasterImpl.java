@@ -9,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
@@ -16,12 +17,14 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.processbreaker.Payload;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
@@ -59,6 +62,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
@@ -69,7 +73,9 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
     public PingResponse internalHealthcheck() {
         // TODO this probably can be done better with a listener plugged to the healthCheck call, but
         //  for now it suffices
-
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         Utils.LOGGER.trace("Performing healthcheck...");
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
@@ -87,6 +93,10 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+            return;
+        }
+
         Utils.LOGGER.trace("Received health check request");
 
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);

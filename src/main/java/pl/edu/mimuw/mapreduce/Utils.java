@@ -12,11 +12,14 @@ import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.processbreaker.Action;
+import pl.edu.mimuw.proto.processbreaker.Payload;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -56,13 +59,14 @@ public class Utils {
         }
     }
 
-    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException {
+    public static <S extends BindableService & HealthCheckable> Server start_server(S service, HealthStatusManager health, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
                 ServerBuilder.forPort(port)
                         .addService(service)
                         .addService(ProtoReflectionService.newInstance())
                         .addService(health.getHealthService())
+                        .addService(ServerBreakerImpl.getInstance())
                         .build();
 
         server.start();
@@ -140,5 +144,58 @@ public class Utils {
         PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
         responseObserver.onNext(pingResponse);
         responseObserver.onCompleted();
+    }
+
+    public static void respondToHealthCheckUnhealthy(StreamObserver<PingResponse> responseObserver) {
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        responseObserver.onNext(pingResponse);
+        responseObserver.onCompleted();
+    }
+
+    public static void handleServerBreakerAction(StreamObserver<Response> responseObserver) {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        if (payload.getAction() == Action.FAIL_ALWAYS) {
+            Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
+        }
+    }
+    //Returns true if response was made.
+    public static boolean handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        if (payload.getAction() == Action.FAIL_ALWAYS) {
+            Utils.respondToHealthCheckUnhealthy(responseObserver);
+            return true;
+        }
+        return false;
+    }
+
+    // Returns true if we should fail internalHealthckeck
+    public static boolean handleServerBreakerInternalHealthCheckAction() {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        return payload.getAction() == Action.FAIL_ALWAYS;
+    }
+
+    private static void handlePayload(Payload payload){
+        switch (payload.getAction()) {
+            case KILL -> System.exit(1);
+            case HANG -> {
+                while (true) {
+                    try {
+                        TimeUnit.SECONDS.sleep(payload.getParam());
+                    } catch (InterruptedException e) {
+                        System.exit(0);
+                    }
+                }
+            }
+            case TIMEOUT -> {
+                try {
+                    TimeUnit.SECONDS.sleep(payload.getParam());
+                } catch (InterruptedException e) {
+                    System.exit(0);
+                }
+            }
+        }
     }
 }

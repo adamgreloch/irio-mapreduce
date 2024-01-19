@@ -8,15 +8,22 @@ import org.junit.Rule;
 import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
+import pl.edu.mimuw.proto.common.Batch;
+import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.processbreaker.Action;
+import pl.edu.mimuw.proto.processbreaker.Payload;
+import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 
 import java.util.concurrent.TimeUnit;
 
@@ -103,6 +110,76 @@ public class MasterImplTest {
 
         taskManagerServer.shutdownNow().awaitTermination();
         masterServer.shutdownNow().awaitTermination();
+    }
+
+    @Test
+    public void masterImpl_alwaysFailFlagIsSet() throws Exception {
+        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
+
+        HealthStatusManager taskManagerHealth = new HealthStatusManager();
+        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
+                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+
+        HealthStatusManager workerHealth = new HealthStatusManager();
+        var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,
+                ClusterConfig.WORKERS_URI);
+
+        // Generate a unique in-process server name.
+        String masterName = InProcessServerBuilder.generateName();
+
+        HealthStatusManager masterHealth = new HealthStatusManager();
+        // Create a server, add service, start, and register for automatic graceful shutdown.
+        var masterService =
+                grpcCleanup.register(InProcessServerBuilder.forName(masterName).directExecutor()
+                        .addService(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI))
+                        .addService(ServerBreakerImpl.getInstance())
+                        .build().start());
+
+        MasterGrpc.MasterBlockingStub blockingStub = MasterGrpc.newBlockingStub(
+                // Create a client channel and register for automatic graceful shutdown.
+                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
+
+
+        ServerBreakerGrpc.ServerBreakerBlockingStub serverBreakerStub = ServerBreakerGrpc.newBlockingStub(
+                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
+
+        TimeUnit.SECONDS.sleep(1);
+
+        PingResponse response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+        // Everyone is alive here
+        assertEquals(HealthStatusCode.Healthy, response.getStatusCode());
+
+
+        Response breakerResponse = serverBreakerStub.executePayload(
+                Payload.newBuilder().setAction(Action.FAIL_ALWAYS).build()
+        );
+
+        response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+
+        // Master should always fail
+        assertEquals(HealthStatusCode.Error, response.getStatusCode());
+
+        Response masterResponse = blockingStub.submitBatch(
+                Batch.newBuilder().build()
+        );
+        assertEquals(StatusCode.Err, masterResponse.getStatusCode());
+
+
+        breakerResponse = serverBreakerStub.executePayload(
+                Payload.newBuilder().setAction(Action.NONE).build()
+        );
+
+        response = blockingStub.healthCheck(Ping.newBuilder().build());
+
+        // master should return good
+        assertEquals(HealthStatusCode.Healthy, response.getStatusCode());
+
+
+        workerServer.shutdownNow().awaitTermination();
+        taskManagerServer.shutdownNow().awaitTermination();
+        masterService.shutdownNow().awaitTermination();
     }
 
 }

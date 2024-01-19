@@ -48,23 +48,31 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+            return;
+        }
         Utils.LOGGER.trace("Received health check request");
         Utils.respondToHealthcheck(responseObserver);
     }
 
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 
     @Override
     public PingResponse internalHealthcheck() {
         // TODO perform filesystem access check
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
     }
 
