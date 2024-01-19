@@ -25,7 +25,6 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -104,11 +103,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 ClusterConfig.TASK_MANAGERS_URI).awaitTermination();
     }
 
-    private FutureCallback<Response> createWorkerMapResponseCallback(StreamObserver<Response> responseObserver,
-                                                                     CountDownLatch operationsDoneLatch,
-                                                                     Object request,
-                                                                     int attempt,
-                                                                     WorkerGrpc.WorkerFutureStub workerFutureStub) {
+    private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
+                                                                  CountDownLatch operationsDoneLatch,
+                                                                  Object request,
+                                                                  int attempt,
+                                                                  WorkerGrpc.WorkerFutureStub workerFutureStub) {
         if (!(request instanceof DoMapRequest) && !(request instanceof DoReduceRequest)) {
             throw new AssertionError("Object is neither an instance of DoMapRequest or DoReduceRequest");
         }
@@ -128,7 +127,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         listenableFuture = workerFutureStub.doReduce(doReduceRequest);
                     }
                     Futures.addCallback(listenableFuture,
-                            createWorkerMapResponseCallback(responseObserver, operationsDoneLatch, request, attempt + 1, workerFutureStub),
+                            createWorkerResponseCallback(responseObserver, operationsDoneLatch, request, attempt + 1, workerFutureStub),
                             pool);
                     return;
                 }
@@ -230,7 +229,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
                 Futures.addCallback(listenableFuture,
-                        createWorkerMapResponseCallback(responseObserver, phaseDoneLatch, doMapRequest),
+                        createWorkerResponseCallback(responseObserver, phaseDoneLatch, doMapRequest, 0, workerFutureStub),
                         pool);
             }
 
@@ -277,7 +276,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                 var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                Futures.addCallback(listenableFuture, createWorkerReduceResponseCallback(responseObserver, phaseDoneLatch), pool);
+                Futures.addCallback(listenableFuture,
+                        createWorkerResponseCallback(responseObserver, phaseDoneLatch, doReduceRequest, 0, workerFutureStub),
+                        pool);
             }
 
             try {
