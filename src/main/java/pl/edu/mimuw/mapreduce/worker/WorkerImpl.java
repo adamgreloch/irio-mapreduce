@@ -48,6 +48,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
@@ -59,6 +60,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 

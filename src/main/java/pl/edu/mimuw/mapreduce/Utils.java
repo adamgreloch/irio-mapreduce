@@ -18,6 +18,7 @@ import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.processbreaker.Payload;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -57,7 +58,7 @@ public class Utils {
         }
     }
 
-    public static<S extends BindableService & HealthCheckable>  Server start_server(S service, HealthStatusManager health, String target) throws IOException {
+    public static <S extends BindableService & HealthCheckable> Server start_server(S service, HealthStatusManager health, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
         Server server =
                 ServerBuilder.forPort(port)
@@ -142,5 +143,30 @@ public class Utils {
         PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
         responseObserver.onNext(pingResponse);
         responseObserver.onCompleted();
+    }
+
+    public static void handleServerBreakerAction(StreamObserver<Response> responseObserver) {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        switch (payload.getAction()) {
+            case KILL -> System.exit(0);
+            case HANG -> {
+                while (true) {
+                    try {
+                        TimeUnit.SECONDS.sleep(payload.getParam());
+                    } catch (InterruptedException e) {
+                        System.exit(0);
+                    }
+                }
+            }
+            case TIMEOUT -> {
+                try {
+                    TimeUnit.SECONDS.sleep(payload.getParam());
+                } catch (InterruptedException e) {
+                    System.exit(0);
+                }
+            }
+            case FAIL_ALWAYS ->
+                    Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
+        }
     }
 }

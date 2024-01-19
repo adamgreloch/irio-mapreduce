@@ -6,6 +6,7 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
+import jdk.jshell.execution.Util;
 import org.apache.commons.io.IOUtils;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
@@ -74,6 +75,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new Handler(batch, responseObserver));
     }
 
