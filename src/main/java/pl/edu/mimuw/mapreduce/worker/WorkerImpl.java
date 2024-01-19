@@ -54,6 +54,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        Utils.handleServerBreakerHealthCheckAction(responseObserver);
         Utils.LOGGER.trace("Received health check request");
         Utils.respondToHealthcheck(responseObserver);
     }
@@ -67,6 +68,9 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     @Override
     public PingResponse internalHealthcheck() {
         // TODO perform filesystem access check
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
     }
 

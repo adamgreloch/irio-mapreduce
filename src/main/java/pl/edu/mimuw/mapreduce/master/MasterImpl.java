@@ -73,7 +73,9 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
     public PingResponse internalHealthcheck() {
         // TODO this probably can be done better with a listener plugged to the healthCheck call, but
         //  for now it suffices
-
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         Utils.LOGGER.trace("Performing healthcheck...");
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
@@ -91,6 +93,8 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
+        Utils.handleServerBreakerHealthCheckAction(responseObserver);
+
         Utils.LOGGER.trace("Received health check request");
 
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);

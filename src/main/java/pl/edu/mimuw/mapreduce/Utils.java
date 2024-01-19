@@ -18,6 +18,7 @@ import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
+import pl.edu.mimuw.proto.processbreaker.Action;
 import pl.edu.mimuw.proto.processbreaker.Payload;
 
 import java.io.IOException;
@@ -145,8 +146,36 @@ public class Utils {
         responseObserver.onCompleted();
     }
 
+    public static void respondToHealthCheckUnhealthy(StreamObserver<PingResponse> responseObserver) {
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        responseObserver.onNext(pingResponse);
+        responseObserver.onCompleted();
+    }
+
     public static void handleServerBreakerAction(StreamObserver<Response> responseObserver) {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        if (payload.getAction() == Action.FAIL_ALWAYS) {
+            Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
+        }
+    }
+
+    public static void handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        if (payload.getAction() == Action.FAIL_ALWAYS) {
+            Utils.respondToHealthCheckUnhealthy(responseObserver);
+        }
+    }
+
+    // Returns true if we should fail internalHealthckeck
+    public static boolean handleServerBreakerInternalHealthCheckAction() {
+        Payload payload = ServerBreakerImpl.getInstance().getPayload();
+        handlePayload(payload);
+        return payload.getAction() == Action.FAIL_ALWAYS;
+    }
+
+    private static void handlePayload(Payload payload){
         switch (payload.getAction()) {
             case KILL -> System.exit(0);
             case HANG -> {
@@ -165,8 +194,6 @@ public class Utils {
                     System.exit(0);
                 }
             }
-            case FAIL_ALWAYS ->
-                    Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
         }
     }
 }

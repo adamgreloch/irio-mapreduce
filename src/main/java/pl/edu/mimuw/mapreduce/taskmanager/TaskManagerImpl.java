@@ -14,6 +14,7 @@ import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.*;
+import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
@@ -82,6 +83,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
         Utils.LOGGER.trace("Received health check request");
+        Utils.handleServerBreakerHealthCheckAction(responseObserver);
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);
@@ -92,6 +94,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public PingResponse internalHealthcheck() {
+        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+        }
         Utils.LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
