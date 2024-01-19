@@ -1,2 +1,0 @@
-some_word, 17
-some_word_2, 15
