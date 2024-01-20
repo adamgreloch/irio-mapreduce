@@ -143,14 +143,8 @@ public class Utils {
         responseObserver.onCompleted();
     }
 
-    public static void respondToHealthcheck(StreamObserver<PingResponse> responseObserver) {
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
-        responseObserver.onNext(pingResponse);
-        responseObserver.onCompleted();
-    }
-
-    public static void respondToHealthCheckUnhealthy(StreamObserver<PingResponse> responseObserver) {
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+    public static void respondToHealthcheck(StreamObserver<PingResponse> responseObserver, HealthStatusCode code) {
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(code).build();
         responseObserver.onNext(pingResponse);
         responseObserver.onCompleted();
     }
@@ -167,13 +161,13 @@ public class Utils {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
         handlePayload(payload);
         if (payload.getAction() == Action.FAIL_ALWAYS) {
-            Utils.respondToHealthCheckUnhealthy(responseObserver);
+            Utils.respondToHealthcheck(responseObserver, HealthStatusCode.Error);
             return true;
         }
         return false;
     }
 
-    // Returns true if we should fail internalHealthckeck
+    // Returns true if we should fail internal healthcheck
     public static boolean handleServerBreakerInternalHealthCheckAction() {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
         handlePayload(payload);
