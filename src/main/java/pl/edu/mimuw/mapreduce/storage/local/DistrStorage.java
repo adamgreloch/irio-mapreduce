@@ -11,10 +11,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Stream;
+
+import static org.apache.commons.lang3.StringUtils.lastIndexOf;
 
 
 /* NOTE: We assume that the argument-directories already exist */
@@ -110,7 +110,7 @@ public class DistrStorage implements Storage {
     @Override
     public long getFileCount(String dirId) {
         long length = 0;
-        try (Stream<Path> files = Files.list(Paths.get(dirId))) {
+        try (Stream<Path> files = Files.list(Paths.get(storagePath.resolve(dirId).toString()))) {
             length = files.count();
         } catch (Exception e) {
             throw new IllegalStateException("Cannot count files in dir: " + dirId);
@@ -166,6 +166,52 @@ public class DistrStorage implements Storage {
                 return storagePath.resolve(dirId).resolve(String.valueOf(current++));
             }
         };
+    }
+
+    @Override
+    public void saveState(String podId, String state) {
+        createDir("STATE_DIR");
+        try {
+            Files.writeString(storagePath.resolve("STATE_DIR").resolve(podId), state);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public String retrieveState(String podId) {
+        String state;
+        try {
+            state = Files.readString(storagePath.resolve("STATE_DIR").resolve(podId));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return state;
+    }
+
+    @Override
+    public void removeReduceDuplicates(String dirId) {
+        createDir(dirId);
+        Set<String> fileNamesPrefixes = new HashSet<>();
+        try(Stream<Path> files = Files.list(Paths.get(storagePath.resolve(dirId).toString()))) {
+            files.forEach(path -> {
+                String fileName = path.getFileName().toString();
+                int firstUnderscoreIndex = fileName.indexOf("_");
+                int secondUnderscoreIndex = fileName.indexOf("_", firstUnderscoreIndex + 1);
+                String fileNamePrefix = fileName.substring(0, secondUnderscoreIndex);
+                if (fileNamesPrefixes.contains(fileNamePrefix)) {
+                    try {
+                        Files.delete(path);
+                    } catch (IOException e) {
+                        throw new IllegalStateException("Cannot remove reduce duplicates in dir: " + dirId);
+                    }
+                } else {
+                    fileNamesPrefixes.add(fileNamePrefix);
+                }
+            });
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot remove reduce duplicates in dir: " + dirId);
+        }
     }
 }
 

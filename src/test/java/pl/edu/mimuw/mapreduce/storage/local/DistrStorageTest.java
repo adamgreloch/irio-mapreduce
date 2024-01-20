@@ -1,12 +1,16 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -45,61 +49,69 @@ class DistrStorageTest {
 
     @Test
     @DisplayName("getFile() should throw IllegalStateException when file does not exist")
-    void getFile() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFile() throws IOException {
+        String dirId = "1";
         long fileId = 1;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         assertThrows(IllegalStateException.class, () -> storage.getFile(String.valueOf(dirId), fileId));
     }
 
+    private static Path tmpDirPath;
+    private static DistrStorage storage;
+
+    @BeforeAll
+    static void setupStorage() throws IOException {
+        tmpDirPath = Files.createTempDirectory("distr_storage_test")
+                              .toAbsolutePath();
+
+        storage = new DistrStorage(tmpDirPath.toString());
+    }
+
+    @AfterAll
+    static void cleanup() {
+        Utils.removeDirRecursively(tmpDirPath.toFile());
+    }
+
     @Test
     @DisplayName("getFile() should return the file when it exists")
-    void getFile2() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFile2() throws IOException {
+        String dirId = "1";
         long fileId = 1;
-        File dir = new File("1");
-        dir.mkdir();
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         try {
-            File file = new File(dirId + "/" + fileId);
+            File file = new File(tmpDirPath.resolve(dirId).resolve(String.valueOf(fileId)).toString());
             Files.write(file.toPath(), "Some file content".getBytes(), StandardOpenOption.CREATE);
         } catch (Exception e) {
-            dir.delete();
-            fail("Exception not expected: " + e.getMessage());
+            fail("Exception not expected: " + e);
         }
 
-        FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
+        FileRep fileRep = storage.getFile(dirId, fileId);
         assertNotNull(fileRep);
         assertEquals(fileId, fileRep.id());
-
-        fileRep.file().delete();
-        dir.delete();
-
     }
 
     @Test
     @DisplayName("putFile() should copy the content of the temporary file to the storage")
-    void putFile() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void putFile() throws IOException {
+        String dirId = "1";
         long fileId = 1;
 
-        // create folder of name "1"
-        File dir = new File("1");
-        dir.mkdir();
+        Files.createDirectories(tmpDirPath.resolve(dirId));;
 
-        File tempFile = new File("tempFile.txt");
+        File tempFile = new File(tmpDirPath.resolve(dirId).resolve(String.valueOf(fileId)).toString());
         try {
             // Write "abcd" into the temporary file
             Files.write(tempFile.toPath(), "abcd".getBytes(), StandardOpenOption.CREATE);
 
             // Call putFile method to copy the content to the storage
-            storage.putFile(String.valueOf(dirId), fileId, tempFile);
+            storage.putFile(dirId, fileId, tempFile);
 
             // Verify if the content of the new file matches the expected content
-            FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
+            FileRep fileRep = storage.getFile(dirId, fileId);
             assertNotNull(fileRep);
             assertEquals(fileId, fileRep.id());
 
@@ -113,34 +125,29 @@ class DistrStorageTest {
             fail("Exception not expected: " + e.getMessage());
         } finally {
             tempFile.delete();
-            dir.delete();
+            Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         }
     }
 
     @Test
-    void getFileCountEmpty() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
-        File dir = new File("1");
-        dir.mkdir();
+    void getFileCountEmpty() throws IOException {
+        String dirId = "1";
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
-        long fileCount = storage.getFileCount(String.valueOf(dirId));
-        dir.delete();
+        long fileCount = storage.getFileCount(dirId);
+        Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         assertEquals(0, fileCount);
     }
 
     @Test
     @DisplayName("getFileCount() should return the number of files in the directory")
-    void getFileCount() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFileCount() throws IOException {
+        String dirId = "1";
 
-        // create folder of name "1"
-        File dir = new File("1");
-        dir.mkdir();
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         try {
-            File[] files = createFiles(3, dirId, storage.getStoragePath());
+            File[] files = createFiles(3, Long.parseLong(dirId), storage.getStoragePath());
 
             // Call getFileCount method to get the number of files in the directory
             long fileCount = storage.getFileCount(String.valueOf(dirId));
@@ -152,21 +159,22 @@ class DistrStorageTest {
         } catch (Exception e) {
             fail("Exception not expected: " + e.getMessage());
         } finally {
-            dir.delete();
+            Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         }
     }
 
     @Test
-    void getSplitsForDir() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getSplitsForDir() throws IOException {
+        String dirId = "1";
         int splits = 3;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(10, dirId, storage.getStoragePath());
+        File[] files = createFiles(10, Long.parseLong(dirId), storage.getStoragePath());
 
-        List<Split> splitList = storage.getSplitsForDir(String.valueOf(dirId), splits);
+        List<Split> splitList = storage.getSplitsForDir(dirId, splits);
         assertEquals(splits, splitList.size());
         assertEquals(0, splitList.get(0).getBeg());
         assertEquals(2, splitList.get(0).getEnd());
@@ -180,14 +188,14 @@ class DistrStorageTest {
     }
 
     @Test
-    void getSplitIterator() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getSplitIterator() throws IOException {
+        String dirId = "1";
         long beg = 0;
         long end = 10;
+        Files.createDirectories(tmpDirPath.resolve(dirId));
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(20, dirId, storage.getStoragePath()); // create more files than split iterator has
+        File[] files = createFiles(20, Long.parseLong(dirId), storage.getStoragePath()); // create more files than split iterator has
         Split split = new SplitBuilder(beg, end).build();
 
         Iterator<Path> iterator = storage.getSplitIterator(String.valueOf(dirId), split);
@@ -204,12 +212,12 @@ class DistrStorageTest {
     }
 
     @Test
-    void getDirIterator() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getDirIterator() throws IOException {
+        String dirId = "1";
         File dir = new File("1");
+        Files.createDirectories(tmpDirPath.resolve(dirId));
         dir.mkdir();
-        File[] files = createFiles(20, dirId, storage.getStoragePath());
+        File[] files = createFiles(20, Long.parseLong(dirId), storage.getStoragePath());
 
         Iterator<Path> iterator = storage.getDirIterator(String.valueOf(dirId));
         assertNotNull(iterator);
@@ -223,6 +231,56 @@ class DistrStorageTest {
         assertFalse(iterator.hasNext());
         deleteFiles(files);
         dir.delete();
+    }
+
+    @Test
+    void saveState() {
+        String podId = "testPod";
+        String state = "Sample state content";
+
+        storage.saveState(podId, state);
+
+        try {
+            String savedState = Files.readString(storage.getStoragePath().resolve("STATE_DIR").resolve(podId));
+
+            assertEquals(state, savedState);
+        } catch (java.io.IOException e) {
+            fail("Exception not expected: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void retrieveState() {
+        String podId = "testPod";
+        String state = "Sample state content";
+
+        storage.saveState(podId, state);
+        String retrievedState = storage.retrieveState(podId);
+        assertEquals(state, retrievedState);
+    }
+
+    @Test
+    void removeReduceDuplicates() throws IOException {
+        String dirId = "1";
+        storage.createDir(dirId);
+
+        Path filePath1 = tmpDirPath.resolve(dirId).resolve("1_R_pod1");
+        Path filePath2 = tmpDirPath.resolve(dirId).resolve("1_R_pod2");
+        Path filePath3 = tmpDirPath.resolve(dirId).resolve("1_R_pod1_duplicate");
+        Path filePath4 = tmpDirPath.resolve(dirId).resolve("2_R_pod1");
+
+        Files.createDirectories(tmpDirPath);
+        Files.createFile(filePath1);
+        Files.createFile(filePath2);
+        Files.createFile(filePath3);
+        Files.createFile(filePath4);
+
+        storage.removeReduceDuplicates(dirId);
+
+        assertTrue(Files.exists(filePath3));
+        assertFalse(Files.exists(filePath1));
+        assertFalse(Files.exists(filePath2));
+        assertTrue(Files.exists(filePath4));
     }
 }
 
