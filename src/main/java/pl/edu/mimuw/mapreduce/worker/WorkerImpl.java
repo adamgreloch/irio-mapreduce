@@ -58,7 +58,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             return;
         }
         Utils.LOGGER.trace("Received health check request");
-        Utils.respondToHealthcheck(responseObserver);
+        Utils.respondToHealthcheck(responseObserver, HealthStatusCode.Healthy);
     }
 
     @Override

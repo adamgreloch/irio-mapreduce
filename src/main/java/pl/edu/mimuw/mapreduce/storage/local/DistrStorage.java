@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -24,6 +25,19 @@ public class DistrStorage implements Storage {
     public DistrStorage(String storagePathString) {
         this.storagePath = Paths.get(storagePathString);
         try {
+            if (!Files.exists(this.storagePath)) {
+                throw new IOException("Storage path doesn't exist: " + this.storagePath);
+            }
+
+            if (!storagePath.toFile().canRead() || !storagePath.toFile().canWrite()) {
+                throw new IOException("Cannot read/write to storage path: " + this.storagePath);
+            }
+
+            Files.createDirectories(this.storagePath.resolve(BINARY_DIR));
+            Files.createDirectories(this.storagePath.resolve(STATE_DIR));
+
+            Utils.LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
+
             this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
         } catch (IOException e) {
             throw new RuntimeException(e);

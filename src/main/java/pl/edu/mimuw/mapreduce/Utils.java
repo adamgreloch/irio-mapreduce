@@ -15,11 +15,13 @@ import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.processbreaker.Action;
 import pl.edu.mimuw.proto.processbreaker.Payload;
+import pl.edu.mimuw.proto.worker.DoMapRequest;
 
 import java.io.File;
 import java.io.IOException;
@@ -152,14 +154,8 @@ public class Utils {
         responseObserver.onCompleted();
     }
 
-    public static void respondToHealthcheck(StreamObserver<PingResponse> responseObserver) {
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
-        responseObserver.onNext(pingResponse);
-        responseObserver.onCompleted();
-    }
-
-    public static void respondToHealthCheckUnhealthy(StreamObserver<PingResponse> responseObserver) {
-        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
+    public static void respondToHealthcheck(StreamObserver<PingResponse> responseObserver, HealthStatusCode code) {
+        PingResponse pingResponse = PingResponse.newBuilder().setStatusCode(code).build();
         responseObserver.onNext(pingResponse);
         responseObserver.onCompleted();
     }
@@ -171,25 +167,26 @@ public class Utils {
             Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
         }
     }
+
     //Returns true if response was made.
     public static boolean handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
         handlePayload(payload);
         if (payload.getAction() == Action.FAIL_ALWAYS) {
-            Utils.respondToHealthCheckUnhealthy(responseObserver);
+            Utils.respondToHealthcheck(responseObserver, HealthStatusCode.Error);
             return true;
         }
         return false;
     }
 
-    // Returns true if we should fail internalHealthckeck
+    // Returns true if we should fail internal healthcheck
     public static boolean handleServerBreakerInternalHealthCheckAction() {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
         handlePayload(payload);
         return payload.getAction() == Action.FAIL_ALWAYS;
     }
 
-    private static void handlePayload(Payload payload){
+    private static void handlePayload(Payload payload) {
         switch (payload.getAction()) {
             case KILL -> System.exit(1);
             case HANG -> {
@@ -209,5 +206,11 @@ public class Utils {
                 }
             }
         }
+    }
+
+    public static DoMapRequest changeDestDirIdInTask(DoMapRequest request) {
+        return DoMapRequest.newBuilder().mergeFrom(request).setTask(
+                Task.newBuilder().mergeFrom(request.getTask()).setDestDirId(UUID.randomUUID().toString()).build()
+        ).build();
     }
 }
