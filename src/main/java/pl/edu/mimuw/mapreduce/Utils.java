@@ -17,16 +17,19 @@ import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
+import pl.edu.mimuw.proto.common.Task;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.processbreaker.Action;
 import pl.edu.mimuw.proto.processbreaker.Payload;
+import pl.edu.mimuw.proto.worker.DoMapRequest;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class Utils {
@@ -156,6 +159,7 @@ public class Utils {
             Utils.respondWithThrowable(new RuntimeException("Always failing flag is set."), responseObserver);
         }
     }
+
     //Returns true if response was made.
     public static boolean handleServerBreakerHealthCheckAction(StreamObserver<PingResponse> responseObserver) {
         Payload payload = ServerBreakerImpl.getInstance().getPayload();
@@ -174,7 +178,7 @@ public class Utils {
         return payload.getAction() == Action.FAIL_ALWAYS;
     }
 
-    private static void handlePayload(Payload payload){
+    private static void handlePayload(Payload payload) {
         switch (payload.getAction()) {
             case KILL -> System.exit(1);
             case HANG -> {
@@ -194,5 +198,11 @@ public class Utils {
                 }
             }
         }
+    }
+
+    public static DoMapRequest changeDestDirIdInTask(DoMapRequest request) {
+        return DoMapRequest.newBuilder().mergeFrom(request).setTask(
+                Task.newBuilder().mergeFrom(request.getTask()).setDestDirId(UUID.randomUUID().toString()).build()
+        ).build();
     }
 }
