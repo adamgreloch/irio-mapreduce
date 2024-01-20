@@ -83,6 +83,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                                                                       T request,
                                                                       int attempt,
                                                                       Map<T, List<ListenableFuture<Response>>> runningRequests) {
+
         return new FutureCallback<>() {
             @Override
             public void onSuccess(Response result) {
@@ -100,6 +101,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 }
 
                 var futures = runningRequests.remove(request);
+                if (futures == null)
+                    // Some other worker's response has already been sent for that request, ignore
+                    return;
+
                 for (var future : futures) {
                     future.cancel(true);
                 }
