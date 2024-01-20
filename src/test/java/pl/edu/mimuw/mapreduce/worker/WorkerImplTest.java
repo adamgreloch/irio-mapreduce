@@ -8,6 +8,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.Split;
@@ -32,16 +33,6 @@ public class WorkerImplTest {
     private static Server workerService;
     private static WorkerGrpc.WorkerBlockingStub blockingStub;
     private static Storage storage;
-
-    static void whyCantIRemoveDirRecursivelyInJava(File directoryToBeDeleted) {
-        File[] allContents = directoryToBeDeleted.listFiles();
-        if (allContents != null) {
-            for (File file : allContents) {
-                whyCantIRemoveDirRecursivelyInJava(file);
-            }
-        }
-        directoryToBeDeleted.delete();
-    }
 
     public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
@@ -152,7 +143,7 @@ public class WorkerImplTest {
 
     @AfterAll
     public static void cleanup() throws Exception {
-        whyCantIRemoveDirRecursivelyInJava(tempDirPath.toFile());
+        Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();
     }
 

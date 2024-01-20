@@ -1,7 +1,6 @@
 package pl.edu.mimuw.mapreduce;
 
 import com.google.common.util.concurrent.FutureCallback;
-import com.google.protobuf.util.JsonFormat;
 import io.grpc.BindableService;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
@@ -14,7 +13,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
-import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
@@ -23,10 +21,10 @@ import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.processbreaker.Action;
 import pl.edu.mimuw.proto.processbreaker.Payload;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 public class Utils {
@@ -61,6 +59,17 @@ public class Utils {
             }
         }
     }
+
+    public static void removeDirRecursively(File directoryToBeDeleted) {
+        File[] allContents = directoryToBeDeleted.listFiles();
+        if (allContents != null) {
+            for (File file : allContents) {
+                removeDirRecursively(file);
+            }
+        }
+        directoryToBeDeleted.delete();
+    }
+
 
     public static <S extends BindableService & HealthCheckable> Server start_server(S service, HealthStatusManager health, String target) throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);

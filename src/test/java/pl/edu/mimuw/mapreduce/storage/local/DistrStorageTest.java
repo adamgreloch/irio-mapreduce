@@ -1,12 +1,16 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -53,30 +57,40 @@ class DistrStorageTest {
         assertThrows(IllegalStateException.class, () -> storage.getFile(String.valueOf(dirId), fileId));
     }
 
+    private static Path tmpDirPath;
+    private static DistrStorage storage;
+
+    @BeforeAll
+    static void setupStorage() throws IOException {
+        tmpDirPath = Files.createTempDirectory("distr_storage_test")
+                              .toAbsolutePath();
+
+        storage = new DistrStorage(tmpDirPath.toString());
+    }
+
+    @AfterAll
+    static void cleanup() {
+        Utils.removeDirRecursively(tmpDirPath.toFile());
+    }
+
     @Test
     @DisplayName("getFile() should return the file when it exists")
-    void getFile2() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFile2() throws IOException {
+        String dirId = "1";
         long fileId = 1;
-        File dir = new File("1");
-        dir.mkdir();
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         try {
-            File file = new File(dirId + "/" + fileId);
+            File file = new File(tmpDirPath.resolve(dirId).resolve(String.valueOf(fileId)).toString());
             Files.write(file.toPath(), "Some file content".getBytes(), StandardOpenOption.CREATE);
         } catch (Exception e) {
-            dir.delete();
-            fail("Exception not expected: " + e.getMessage());
+            fail("Exception not expected: " + e);
         }
 
-        FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
+        FileRep fileRep = storage.getFile(dirId, fileId);
         assertNotNull(fileRep);
         assertEquals(fileId, fileRep.id());
-
-        fileRep.file().delete();
-        dir.delete();
-
     }
 
     @Test
