@@ -53,7 +53,6 @@ public class Client {
     }
 
     public static void main(String[] args) throws Exception {
-
         if (args.length != 1) {
             LOGGER.info("Expected 1 argument, but got: " + args.length);
             return;
