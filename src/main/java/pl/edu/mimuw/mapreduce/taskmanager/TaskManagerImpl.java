@@ -40,13 +40,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
-    private final HealthStatusManager health;
     private final Integer MAX_ATTEMPT = -1;
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
-        this.health = health;
         LOGGER.info("Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
@@ -64,8 +62,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
-//        Utils.handleServerBreakerAction(responseObserver);
-        LOGGER.info("TM start processing batch");
+        Utils.handleServerBreakerAction(responseObserver);
         pool.execute(new BatchHandler(batch, responseObserver));
     }
 
@@ -100,7 +97,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
-        private final String finalDestDirId;
         private final String concatDirId;
         // Each Key in this map is a Task.ID
         private final Map<Long, List<ListenableFuture<Response>>> runningMaps;
@@ -119,7 +115,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
             this.reduceTaskCount = batch.getReduceBinIdsCount();
-            this.finalDestDirId = batch.getFinalDestDirId();
             this.runningMaps = new ConcurrentHashMap<>();
             this.runningReduces = new ConcurrentHashMap<>();
             this.completedMaps = new ConcurrentHashMap<>();
@@ -171,17 +166,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                         doMapRequest, 0, runningMaps, completedMaps), pool);
             }
-            LOGGER.info("Before ifStale phase.");
             try {
                 rescheduleIfStale(runningMaps, completedMaps, basicMap);
             } catch (InterruptedException e) {
-                LOGGER.info("ERROR after if stale.");
                 Utils.respondWithThrowable(e, responseObserver);
                 return;
             }
 
             // Concatenation phase
-            LOGGER.info("Got to concatenation phase.");
             List<Integer> fileIds = new ArrayList<>();
 
             assert !workersDestDirIds.isEmpty();
@@ -211,7 +203,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 fileIds.add(i);
             }
 
-            LOGGER.info("Got to reduce phase.");
             // Reduce phase
 
             phaseDoneLatch = new CountDownLatch(fileIds.size());
@@ -228,7 +219,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                         doReduceRequest, 0, runningReduces, completedReduces), pool);
             }
-            LOGGER.info("Got out of reduce phase.");
 
             try {
                 rescheduleIfStale(runningReduces, completedReduces, basicReduce);
@@ -236,7 +226,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Utils.respondWithThrowable(e, responseObserver);
                 return;
             }
-            LOGGER.info("Got to reduce phase after rescheduleIfStale");
 
             storage.removeReduceDuplicates(batch.getFinalDestDirId());
 
@@ -312,9 +301,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-//                    if (attempt > MAX_ATTEMPT) { // TODO
-//                        Utils.respondWithThrowable(t, responseObserver);
-//                    } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                    if (attempt >= MAX_ATTEMPT) {
+                        Utils.respondWithThrowable(t, responseObserver);
+                    } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                 }
 
                 private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch,

@@ -6,11 +6,9 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.grpc.ManagedChannel;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
-import jdk.jshell.execution.Util;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
-import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
@@ -18,23 +16,18 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
-import pl.edu.mimuw.proto.processbreaker.Payload;
 import pl.edu.mimuw.proto.taskmanager.TaskManagerGrpc;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheckable {
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ManagedChannel taskManagerChannel;
-    private final HealthStatusManager health;
 
     public MasterImpl(HealthStatusManager health, String taskManagersUri) {
-        this.health = health;
         Utils.LOGGER.info("Task managers service URI set to: " + taskManagersUri);
         this.taskManagerChannel = Utils.createCustomClientChannelBuilder(taskManagersUri).executor(pool).build();
     }
@@ -64,8 +57,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void submitBatch(Batch request, StreamObserver<Response> responseObserver) {
-//        Utils.handleServerBreakerAction(responseObserver);
-        Utils.LOGGER.info("Master start processing batch");
+        Utils.handleServerBreakerAction(responseObserver);
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
         ListenableFuture<Response> listenableFuture = taskManagerFutureStub.doBatch(request);
