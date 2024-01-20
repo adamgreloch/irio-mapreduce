@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -24,6 +25,11 @@ public class DistrStorage implements Storage {
     public DistrStorage(String storagePathString) {
         this.storagePath = Paths.get(storagePathString);
         try {
+            // This also has a role of a check whether the dir under storagePath exists and accessible
+            Utils.LOGGER.info("Hooking up DistrStorage to path " + storagePathString);
+            Files.createDirectory(this.storagePath.resolve(BINARY_DIR));
+            Files.createDirectory(this.storagePath.resolve(STATE_DIR));
+
             this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
         } catch (IOException e) {
             throw new RuntimeException(e);
