@@ -26,6 +26,7 @@ import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -100,7 +101,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
         private final String finalDestDirId;
-
+        private final String concatDirId;
         // Each Key in this map is a Task.ID
         private final Map<Long, List<ListenableFuture<Response>>> runningMaps;
         private final Map<Long, List<ListenableFuture<Response>>> runningReduces;
@@ -125,6 +126,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             this.completedReduces = new ConcurrentHashMap<>();
             this.basicMap = new ConcurrentHashMap<>();
             this.basicReduce = new ConcurrentHashMap<>();
+            this.concatDirId = UUID.randomUUID().toString();
+            storage.createDir(concatDirId);
         }
 
         private Task createMapTask() {
@@ -138,14 +141,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .build();
         }
 
-        private Task createReduceTask(String inputDir) {
+        private Task createReduceTask() {
             return Task.newBuilder()
                     .setTaskId(nextTaskId.getAndIncrement())
                     .setTaskType(Task.TaskType.Reduce)
-                    .setInputDirId(inputDir)
+                    .setInputDirId(concatDirId)
                     .setDestDirId(batch.getFinalDestDirId())
-                    .addAllTaskBinIds(batch.getMapBinIdsList())
-                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .addAllTaskBinIds(batch.getReduceBinIdsList())
                     .build();
         }
 
@@ -185,7 +187,12 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             assert !workersDestDirIds.isEmpty();
 
             for (int i = 0; i < reduceTaskCount; i++) {
-                File mergedFile = new File(storage.getDirPath(finalDestDirId).resolve(String.valueOf(i)).toUri());
+                File mergedFile = null;
+                try {
+                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
 
                 for (var workersDestDirId : workersDestDirIds) {
                     try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
@@ -200,19 +207,19 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     }
                 }
 
-                storage.putFile(finalDestDirId, i, mergedFile);
+                storage.putFile(concatDirId, i, mergedFile);
                 fileIds.add(i);
             }
 
             LOGGER.info("Got to reduce phase.");
             // Reduce phase
 
-            phaseDoneLatch = new CountDownLatch(splitsNum);
+            phaseDoneLatch = new CountDownLatch(fileIds.size());
 
             for (var fileId : fileIds) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-                Task task = createReduceTask(finalDestDirId);
+                Task task = createReduceTask();
 
                 var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
                 basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
@@ -221,6 +228,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                         doReduceRequest, 0, runningReduces, completedReduces), pool);
             }
+            LOGGER.info("Got out of reduce phase.");
 
             try {
                 rescheduleIfStale(runningReduces, completedReduces, basicReduce);
@@ -228,6 +236,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Utils.respondWithThrowable(e, responseObserver);
                 return;
             }
+            LOGGER.info("Got to reduce phase after rescheduleIfStale");
 
             storage.removeReduceDuplicates(batch.getFinalDestDirId());
 
@@ -284,7 +293,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                     Long taskId = getTaskIdFromRequestObject(request);
 
-                    if (completedRequests.putIfAbsent(taskId, true) != null) {
+                    if (completedRequests.putIfAbsent(taskId, true) == null) {
                         var futures = runningRequests.remove(taskId);
                         for (var future : futures) {
                             future.cancel(true);
