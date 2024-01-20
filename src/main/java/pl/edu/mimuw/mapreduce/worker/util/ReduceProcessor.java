@@ -35,13 +35,13 @@ public class ReduceProcessor extends TaskProcessor {
 
             pb.command(binary,
                     "-i", inputPath,
-                    "-o", outputPath + "_R_" + ClusterConfig.POD_NAME);
+                    "-o", outputPath);
 
             pb.start().waitFor();
 
             i++;
         }
 
-        storage.putFile(String.valueOf(destDirId), fileId, files[binIds.size() % 2]);
+        storage.putReduceFile(String.valueOf(destDirId), fileId, ClusterConfig.POD_NAME, files[binIds.size() % 2]);
     }
 }

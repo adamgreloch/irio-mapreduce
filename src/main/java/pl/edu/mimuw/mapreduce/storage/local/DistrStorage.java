@@ -14,8 +14,6 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static org.apache.commons.lang3.StringUtils.lastIndexOf;
-
 
 /* NOTE: We assume that the argument-directories already exist */
 public class DistrStorage implements Storage {
@@ -102,6 +100,16 @@ public class DistrStorage implements Storage {
         try {
             createDir(dirId);
             Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public void putReduceFile(String dirId, long fileId, String authorId, File file) {
+        try {
+            createDir(dirId);
+            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(fileId + "_R_" + authorId).toString()));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
