@@ -96,7 +96,7 @@ public class DistrStorage implements Storage {
     @Override
     public long getFileCount(String dirId) {
         long length = 0;
-        try (Stream<Path> files = Files.list(Paths.get(dirId))) {
+        try (Stream<Path> files = Files.list(Paths.get(storagePath.resolve(dirId).toString()))) {
             length = files.count();
         } catch (Exception e) {
             throw new IllegalStateException("Cannot count files in dir: " + dirId);

@@ -95,25 +95,22 @@ class DistrStorageTest {
 
     @Test
     @DisplayName("putFile() should copy the content of the temporary file to the storage")
-    void putFile() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void putFile() throws IOException {
+        String dirId = "1";
         long fileId = 1;
 
-        // create folder of name "1"
-        File dir = new File("1");
-        dir.mkdir();
+        Files.createDirectories(tmpDirPath.resolve(dirId));;
 
-        File tempFile = new File("tempFile.txt");
+        File tempFile = new File(tmpDirPath.resolve(dirId).resolve(String.valueOf(fileId)).toString());
         try {
             // Write "abcd" into the temporary file
             Files.write(tempFile.toPath(), "abcd".getBytes(), StandardOpenOption.CREATE);
 
             // Call putFile method to copy the content to the storage
-            storage.putFile(String.valueOf(dirId), fileId, tempFile);
+            storage.putFile(dirId, fileId, tempFile);
 
             // Verify if the content of the new file matches the expected content
-            FileRep fileRep = storage.getFile(String.valueOf(dirId), fileId);
+            FileRep fileRep = storage.getFile(dirId, fileId);
             assertNotNull(fileRep);
             assertEquals(fileId, fileRep.id());
 
@@ -127,34 +124,29 @@ class DistrStorageTest {
             fail("Exception not expected: " + e.getMessage());
         } finally {
             tempFile.delete();
-            dir.delete();
+            Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         }
     }
 
     @Test
-    void getFileCountEmpty() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
-        File dir = new File("1");
-        dir.mkdir();
+    void getFileCountEmpty() throws IOException {
+        String dirId = "1";
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
-        long fileCount = storage.getFileCount(String.valueOf(dirId));
-        dir.delete();
+        long fileCount = storage.getFileCount(dirId);
+        Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         assertEquals(0, fileCount);
     }
 
     @Test
     @DisplayName("getFileCount() should return the number of files in the directory")
-    void getFileCount() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFileCount() throws IOException {
+        String dirId = "1";
 
-        // create folder of name "1"
-        File dir = new File("1");
-        dir.mkdir();
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         try {
-            File[] files = createFiles(3, dirId, storage.getStoragePath());
+            File[] files = createFiles(3, Long.parseLong(dirId), storage.getStoragePath());
 
             // Call getFileCount method to get the number of files in the directory
             long fileCount = storage.getFileCount(String.valueOf(dirId));
@@ -166,7 +158,7 @@ class DistrStorageTest {
         } catch (Exception e) {
             fail("Exception not expected: " + e.getMessage());
         } finally {
-            dir.delete();
+            Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         }
     }
 
