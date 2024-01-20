@@ -260,5 +260,29 @@ class DistrStorageTest {
         String retrievedState = storage.retrieveState(podId);
         assertEquals(state, retrievedState);
     }
+
+    @Test
+    void removeReduceDuplicates() throws IOException {
+        String dirId = "1";
+        storage.createDir(dirId);
+
+        Path filePath1 = tmpDirPath.resolve(dirId).resolve("1_R_pod1");
+        Path filePath2 = tmpDirPath.resolve(dirId).resolve("1_R_pod2");
+        Path filePath3 = tmpDirPath.resolve(dirId).resolve("1_R_pod1_duplicate");
+        Path filePath4 = tmpDirPath.resolve(dirId).resolve("2_R_pod1");
+
+        Files.createDirectories(tmpDirPath);
+        Files.createFile(filePath1);
+        Files.createFile(filePath2);
+        Files.createFile(filePath3);
+        Files.createFile(filePath4);
+
+        storage.removeReduceDuplicates(dirId);
+
+        assertTrue(Files.exists(filePath3));
+        assertFalse(Files.exists(filePath1));
+        assertFalse(Files.exists(filePath2));
+        assertTrue(Files.exists(filePath4));
+    }
 }
 

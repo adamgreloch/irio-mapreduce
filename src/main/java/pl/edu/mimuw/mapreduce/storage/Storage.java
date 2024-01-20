@@ -41,4 +41,6 @@ public interface Storage {
     void saveState(String podId, String state);
 
     String retrieveState(String podId);
+
+    void removeReduceDuplicates(String dirId);
 }
