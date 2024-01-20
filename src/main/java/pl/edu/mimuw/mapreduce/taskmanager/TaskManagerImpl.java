@@ -40,7 +40,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
-    private final Integer MAX_ATTEMPT = -1;
+    private final Integer MAX_ATTEMPT = 3;
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {

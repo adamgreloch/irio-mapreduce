@@ -5,7 +5,6 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
-import org.junit.Rule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -16,21 +15,16 @@ import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
-import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
-import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
-import pl.edu.mimuw.proto.healthcheck.Ping;
-import pl.edu.mimuw.proto.healthcheck.PingResponse;
-import pl.edu.mimuw.proto.master.MasterGrpc;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.net.URISyntaxException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 public class ClientTest {
     private static Path tempDirPath;
@@ -38,6 +32,12 @@ public class ClientTest {
     private static WorkerGrpc.WorkerBlockingStub blockingStub;
     private static Storage storage;
     public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
+
+    String loadBatchJsonFromResource(String resourceName) throws IOException, URISyntaxException {
+        var path = getClass().getClassLoader().getResource(resourceName);
+        if (path == null) throw new IOException("no test batch json!");
+        return Path.of(path.toURI()).toString();
+    }
 
     @BeforeAll
     public static void createTempDir() throws Exception {
@@ -72,9 +72,20 @@ public class ClientTest {
         storage.putFile(Storage.BINARY_DIR, binId, binary);
     }
 
-    String readOutputFromFile(Path dirPath, long fileId) throws FileNotFoundException {
-        var buf = new BufferedReader(new FileReader(dirPath.resolve(String.valueOf(fileId)).toString()));
-        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+    String readOutputFromFile(Path dirPath, long fileId) throws IOException {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
+            // Iterate over files in the directory that start with fileId
+            for (Path filePath : stream) {
+                // Check if the file name starts with fileId
+                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
+                    // Read the content of the file
+                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
+                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+                    }
+                }
+            }
+        }
+        throw new IOException("File not found for fileId: " + fileId);
     }
 
     @Test
@@ -103,7 +114,20 @@ public class ClientTest {
 
         storage.createDir("1");
 
-        masterServer.awaitTermination();
+        var path = loadBatchJsonFromResource("client/batch-resource.json");
+        if (path == null) throw new IOException("no json batch resource!");
+        Client.main(new String[]{path});
+        Thread.sleep(2000);
+
+        var output = readOutputFromFile(tempDirPath.resolve("1"), 0);
+        assertEquals("""
+                a 2
+                b 2
+                c 2""", output);
+
+        // nastepny task - zmienic binarke ze sleepem, zajebac workera i sprawdzic czy drugi worker zadziala
+
+        masterServer.shutdownNow().awaitTermination();
         workerServer.shutdownNow().awaitTermination();
         taskManagerServer.shutdownNow().awaitTermination();
         masterServer.shutdownNow().awaitTermination();

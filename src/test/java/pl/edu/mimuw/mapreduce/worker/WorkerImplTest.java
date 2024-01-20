@@ -20,6 +20,7 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.net.URISyntaxException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -69,9 +70,20 @@ public class WorkerImplTest {
         storage.putFile(Storage.BINARY_DIR, binId, binary);
     }
 
-    String readOutputFromFile(Path dirPath, long fileId) throws FileNotFoundException {
-        var buf = new BufferedReader(new FileReader(dirPath.resolve(String.valueOf(fileId)).toString()));
-        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+    String readOutputFromFile(Path dirPath, long fileId) throws IOException {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
+            // Iterate over files in the directory that start with fileId
+            for (Path filePath : stream) {
+                // Check if the file name starts with fileId
+                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
+                    // Read the content of the file
+                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
+                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+                    }
+                }
+            }
+        }
+        throw new IOException("File not found for fileId: " + fileId);
     }
 
     @Test

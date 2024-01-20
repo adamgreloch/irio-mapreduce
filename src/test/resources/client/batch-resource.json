@@ -1,0 +1,7 @@
+{
+  "map_bin_ids": [0],
+  "partition_bin_id": 1,
+  "reduce_bin_ids": [2],
+  "input_id": "0",
+  "final_dest_dir_id": "1"
+}

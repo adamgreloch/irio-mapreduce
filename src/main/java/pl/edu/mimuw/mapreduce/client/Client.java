@@ -24,7 +24,7 @@ public class Client {
 
     public Client(Channel channel) {
         this.blockingStub = MasterGrpc.newBlockingStub(channel);
-    }
+}
 
     public void sendBatch(Batch batch) {
         LOGGER.info("Will try to send batch.");
