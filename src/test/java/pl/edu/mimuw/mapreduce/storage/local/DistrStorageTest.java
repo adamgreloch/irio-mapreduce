@@ -49,10 +49,11 @@ class DistrStorageTest {
 
     @Test
     @DisplayName("getFile() should throw IllegalStateException when file does not exist")
-    void getFile() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getFile() throws IOException {
+        String dirId = "1";
         long fileId = 1;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         assertThrows(IllegalStateException.class, () -> storage.getFile(String.valueOf(dirId), fileId));
     }
@@ -163,16 +164,17 @@ class DistrStorageTest {
     }
 
     @Test
-    void getSplitsForDir() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getSplitsForDir() throws IOException {
+        String dirId = "1";
         int splits = 3;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(10, dirId, storage.getStoragePath());
+        File[] files = createFiles(10, Long.parseLong(dirId), storage.getStoragePath());
 
-        List<Split> splitList = storage.getSplitsForDir(String.valueOf(dirId), splits);
+        List<Split> splitList = storage.getSplitsForDir(dirId, splits);
         assertEquals(splits, splitList.size());
         assertEquals(0, splitList.get(0).getBeg());
         assertEquals(2, splitList.get(0).getEnd());
@@ -186,14 +188,14 @@ class DistrStorageTest {
     }
 
     @Test
-    void getSplitIterator() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getSplitIterator() throws IOException {
+        String dirId = "1";
         long beg = 0;
         long end = 10;
+        Files.createDirectories(tmpDirPath.resolve(dirId));
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(20, dirId, storage.getStoragePath()); // create more files than split iterator has
+        File[] files = createFiles(20, Long.parseLong(dirId), storage.getStoragePath()); // create more files than split iterator has
         Split split = new SplitBuilder(beg, end).build();
 
         Iterator<Path> iterator = storage.getSplitIterator(String.valueOf(dirId), split);
@@ -210,12 +212,12 @@ class DistrStorageTest {
     }
 
     @Test
-    void getDirIterator() {
-        DistrStorage storage = new DistrStorage("./");
-        long dirId = 1;
+    void getDirIterator() throws IOException {
+        String dirId = "1";
         File dir = new File("1");
+        Files.createDirectories(tmpDirPath.resolve(dirId));
         dir.mkdir();
-        File[] files = createFiles(20, dirId, storage.getStoragePath());
+        File[] files = createFiles(20, Long.parseLong(dirId), storage.getStoragePath());
 
         Iterator<Path> iterator = storage.getDirIterator(String.valueOf(dirId));
         assertNotNull(iterator);
@@ -236,8 +238,6 @@ class DistrStorageTest {
         String podId = "testPod";
         String state = "Sample state content";
 
-        DistrStorage storage = new DistrStorage("./");
-
         storage.saveState(podId, state);
 
         try {
@@ -253,8 +253,6 @@ class DistrStorageTest {
     void retrieveState() {
         String podId = "testPod";
         String state = "Sample state content";
-
-        DistrStorage storage = new DistrStorage("./");
 
         storage.saveState(podId, state);
         String retrievedState = storage.retrieveState(podId);
