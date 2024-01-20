@@ -220,7 +220,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 return;
             }
 
-            //TODO usunąć duplikaty ze sotrage
+            storage.removeReduceDuplicates(batch.getFinalDestDirId());
 
             Utils.respondWithSuccess(responseObserver);
         }
