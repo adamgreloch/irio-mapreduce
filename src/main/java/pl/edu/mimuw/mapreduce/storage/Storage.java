@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.storage;
 
+import com.google.gson.Gson;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
@@ -36,4 +37,8 @@ public interface Storage {
 
      /** Gets an iterator over all files in a directory dirId */
     Iterator<Path> getDirIterator(String dirId);
+
+    void saveState(String podId, String state);
+
+    String retrieveState(String podId);
 }

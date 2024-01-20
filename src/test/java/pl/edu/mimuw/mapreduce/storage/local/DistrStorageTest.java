@@ -224,5 +224,35 @@ class DistrStorageTest {
         deleteFiles(files);
         dir.delete();
     }
+
+    @Test
+    void saveState() {
+        String podId = "testPod";
+        String state = "Sample state content";
+
+        DistrStorage storage = new DistrStorage("./");
+
+        storage.saveState(podId, state);
+
+        try {
+            String savedState = Files.readString(storage.getStoragePath().resolve("STATE_DIR").resolve(podId));
+
+            assertEquals(state, savedState);
+        } catch (java.io.IOException e) {
+            fail("Exception not expected: " + e.getMessage());
+        }
+    }
+
+    @Test
+    void retrieveState() {
+        String podId = "testPod";
+        String state = "Sample state content";
+
+        DistrStorage storage = new DistrStorage("./");
+
+        storage.saveState(podId, state);
+        String retrievedState = storage.retrieveState(podId);
+        assertEquals(state, retrievedState);
+    }
 }
 

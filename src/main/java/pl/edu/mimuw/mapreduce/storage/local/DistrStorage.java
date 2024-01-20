@@ -153,5 +153,26 @@ public class DistrStorage implements Storage {
             }
         };
     }
+
+    @Override
+    public void saveState(String podId, String state) {
+        createDir("STATE_DIR");
+        try {
+            Files.writeString(storagePath.resolve("STATE_DIR").resolve(podId), state);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public String retrieveState(String podId) {
+        String state;
+        try {
+            state = Files.readString(storagePath.resolve("STATE_DIR").resolve(podId));
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return state;
+    }
 }
 
