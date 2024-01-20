@@ -27,11 +27,9 @@ import java.util.concurrent.TimeUnit;
 public class Client {
     public static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
     private final MasterGrpc.MasterBlockingStub blockingStub;
-    private final Storage storage;
 
     public Client(Channel channel) {
         this.blockingStub = MasterGrpc.newBlockingStub(channel);
-        this.storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
     }
 
     public void sendBatch(Batch batch) {
@@ -73,7 +71,8 @@ public class Client {
         try {
             Client client = new Client(channel);
 
-            File jsonFile = client.storage.getFile(Path.of(jsonFilePath)).file();
+            File jsonFile = new File(jsonFilePath);
+
             String json = FileUtils.readFileToString(jsonFile, StandardCharsets.UTF_8);
             Optional<Batch> optionalBatch = batchFromJson(json);
 
