@@ -8,19 +8,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
-import pl.edu.mimuw.mapreduce.storage.FileRep;
-import pl.edu.mimuw.mapreduce.storage.Storage;
-import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
 import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.master.MasterGrpc;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -66,7 +60,7 @@ public class Client {
         }
         String jsonFilePath = args[0];
 
-        ManagedChannel channel = Utils.createCustomClientChannelBuilder(ClusterConfig.TASK_MANAGERS_URI).build(); // IDK maybe add executor
+        ManagedChannel channel = Utils.createCustomClientChannelBuilder(ClusterConfig.MASTERS_URI).build();
 
         try {
             Client client = new Client(channel);

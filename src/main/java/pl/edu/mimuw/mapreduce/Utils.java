@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class Utils {
@@ -141,14 +142,14 @@ public class Utils {
     }
 
     public static void respondWithThrowable(Throwable e, StreamObserver<Response> responseObserver) {
-        Utils.LOGGER.trace("RPC request failed with: " + e.getMessage());
+        Utils.LOGGER.info("RPC request failed with: " + e.getMessage());
         var response = Response.newBuilder().setStatusCode(StatusCode.Err).setMessage(e.getMessage()).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
 
     public static void respondWithSuccess(StreamObserver<Response> responseObserver) {
-        Utils.LOGGER.trace("RPC request succeeded");
+        Utils.LOGGER.info("RPC request succeeded");
         var response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();

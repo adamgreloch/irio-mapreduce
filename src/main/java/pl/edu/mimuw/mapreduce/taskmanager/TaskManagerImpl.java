@@ -7,11 +7,14 @@ import io.grpc.ManagedChannel;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
+import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
 import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
@@ -23,6 +26,7 @@ import pl.edu.mimuw.proto.worker.DoReduceRequest;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -31,23 +35,22 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
+    public static final Logger LOGGER = LoggerFactory.getLogger(TaskManagerImpl.class);
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
-    private final HealthStatusManager health;
-    private final Integer MAX_ATTEMPT = 3;
+    private final Integer MAX_ATTEMPT = -1;
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
-        this.health = health;
-        Utils.LOGGER.info("Worker service URI set to: " + workersUri);
+        LOGGER.info("Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.info("Hello from TaskManager!");
+        LOGGER.info("Hello from TaskManager!");
 
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
@@ -68,7 +71,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         if (Utils.handleServerBreakerHealthCheckAction(responseObserver)) {
             return;
         }
-        Utils.LOGGER.trace("Received health check request");
+        LOGGER.trace("Received health check request");
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);
@@ -82,7 +85,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         if (Utils.handleServerBreakerInternalHealthCheckAction()) {
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
         }
-        Utils.LOGGER.warn("healthchecking not implemented");
+        LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
 
@@ -94,8 +97,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
-        private final String finalDestDirId;
-
+        private final String concatDirId;
         // Each Key in this map is a Task.ID
         private final Map<Long, List<ListenableFuture<Response>>> runningMaps;
         private final Map<Long, List<ListenableFuture<Response>>> runningReduces;
@@ -108,18 +110,19 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
             this.responseObserver = responseObserver;
-            this.splitsNum = 10;
+            this.splitsNum = 2;
             this.phaseDoneLatch = new CountDownLatch(splitsNum);
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
             this.reduceTaskCount = batch.getReduceBinIdsCount();
-            this.finalDestDirId = batch.getFinalDestDirId();
             this.runningMaps = new ConcurrentHashMap<>();
             this.runningReduces = new ConcurrentHashMap<>();
             this.completedMaps = new ConcurrentHashMap<>();
             this.completedReduces = new ConcurrentHashMap<>();
             this.basicMap = new ConcurrentHashMap<>();
             this.basicReduce = new ConcurrentHashMap<>();
+            this.concatDirId = UUID.randomUUID().toString();
+            storage.createDir(concatDirId);
         }
 
         private Task createMapTask() {
@@ -133,14 +136,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .build();
         }
 
-        private Task createReduceTask(String inputDir) {
+        private Task createReduceTask() {
             return Task.newBuilder()
                     .setTaskId(nextTaskId.getAndIncrement())
                     .setTaskType(Task.TaskType.Reduce)
-                    .setInputDirId(inputDir)
+                    .setInputDirId(concatDirId)
                     .setDestDirId(batch.getFinalDestDirId())
-                    .addAllTaskBinIds(batch.getMapBinIdsList())
-                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .addAllTaskBinIds(batch.getReduceBinIdsList())
                     .build();
         }
 
@@ -155,6 +157,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                 Task task = createMapTask();
 
+                storage.createDir(task.getDestDirId());
+
                 var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                 basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
@@ -162,7 +166,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                         doMapRequest, 0, runningMaps, completedMaps), pool);
             }
-
             try {
                 rescheduleIfStale(runningMaps, completedMaps, basicMap);
             } catch (InterruptedException e) {
@@ -171,13 +174,17 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             }
 
             // Concatenation phase
-
             List<Integer> fileIds = new ArrayList<>();
 
             assert !workersDestDirIds.isEmpty();
 
             for (int i = 0; i < reduceTaskCount; i++) {
-                File mergedFile = new File(storage.getDirPath(finalDestDirId).resolve(String.valueOf(i)).toUri());
+                File mergedFile = null;
+                try {
+                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
 
                 for (var workersDestDirId : workersDestDirIds) {
                     try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
@@ -192,18 +199,18 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     }
                 }
 
-                storage.putFile(finalDestDirId, i, mergedFile);
+                storage.putFile(concatDirId, i, mergedFile);
                 fileIds.add(i);
             }
 
             // Reduce phase
 
-            phaseDoneLatch = new CountDownLatch(splitsNum);
+            phaseDoneLatch = new CountDownLatch(fileIds.size());
 
             for (var fileId : fileIds) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-                Task task = createReduceTask(finalDestDirId);
+                Task task = createReduceTask();
 
                 var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
                 basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
@@ -265,7 +272,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 @Override
                 public void onSuccess(Response result) {
                     if (result.getStatusCode() == StatusCode.Err) {
-                        if (attempt > MAX_ATTEMPT) {
+                        if (attempt >= MAX_ATTEMPT) {
                             Utils.respondWithThrowable(new RuntimeException("Number of attempts for task was " +
                                     "exceeded"), responseObserver);
                             return;
@@ -275,7 +282,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                     Long taskId = getTaskIdFromRequestObject(request);
 
-                    if (completedRequests.putIfAbsent(taskId, true) != null) {
+                    if (completedRequests.putIfAbsent(taskId, true) == null) {
                         var futures = runningRequests.remove(taskId);
                         for (var future : futures) {
                             future.cancel(true);
@@ -294,7 +301,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-                    if (attempt > MAX_ATTEMPT) {
+                    if (attempt >= MAX_ATTEMPT) {
                         Utils.respondWithThrowable(t, responseObserver);
                     } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                 }

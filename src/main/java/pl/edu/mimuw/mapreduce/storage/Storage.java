@@ -1,6 +1,5 @@
 package pl.edu.mimuw.mapreduce.storage;
 
-import com.google.gson.Gson;
 import pl.edu.mimuw.proto.common.Split;
 
 import java.io.File;
@@ -26,6 +25,9 @@ public interface Storage {
 
     /** Puts a file with id fileId to a directory dirId */
     void putFile(String dirId, long fileId, File file);
+
+    /** Puts a file with id fileId to a directory dirId */
+    void putReduceFile(String dirId, long fileId, String authorId, File file);
 
     /** Gets a number of files in directory dirId */
     long getFileCount(String dirId);
