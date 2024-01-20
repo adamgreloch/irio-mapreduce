@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 
 import java.io.File;
@@ -34,7 +35,7 @@ public class ReduceProcessor extends TaskProcessor {
 
             pb.command(binary,
                     "-i", inputPath,
-                    "-o", outputPath);
+                    "-o", outputPath + "_R_" + ClusterConfig.POD_NAME);
 
             pb.start().waitFor();
 
