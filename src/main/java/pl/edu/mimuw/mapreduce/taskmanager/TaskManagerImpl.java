@@ -53,8 +53,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         HealthStatusManager health = new HealthStatusManager();
 
         Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
-                     ClusterConfig.TASK_MANAGERS_URI)
-             .awaitTermination();
+                        ClusterConfig.TASK_MANAGERS_URI)
+                .awaitTermination();
     }
 
     @Override
@@ -117,24 +117,24 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
         private Task createMapTask() {
             return Task.newBuilder()
-                       .setTaskId(nextTaskId.getAndIncrement())
-                       .setTaskType(Task.TaskType.Map)
-                       .setInputDirId(batch.getInputId())
-                       .setDestDirId(UUID.randomUUID().toString())
-                       .addAllTaskBinIds(batch.getMapBinIdsList())
-                       .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
-                       .build();
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Map)
+                    .setInputDirId(batch.getInputId())
+                    .setDestDirId(UUID.randomUUID().toString())
+                    .addAllTaskBinIds(batch.getMapBinIdsList())
+                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .build();
         }
 
         private Task createReduceTask(String inputDir) {
             return Task.newBuilder()
-                       .setTaskId(nextTaskId.getAndIncrement())
-                       .setTaskType(Task.TaskType.Reduce)
-                       .setInputDirId(inputDir)
-                       .setDestDirId(batch.getFinalDestDirId())
-                       .addAllTaskBinIds(batch.getMapBinIdsList())
-                       .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
-                       .build();
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Reduce)
+                    .setInputDirId(inputDir)
+                    .setDestDirId(batch.getFinalDestDirId())
+                    .addAllTaskBinIds(batch.getMapBinIdsList())
+                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .build();
         }
 
         @Override
@@ -147,7 +147,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
                 Task task = createMapTask();
-                workersDestDirIds.add(task.getDestDirId());
 
                 var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
@@ -259,6 +258,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         for (var future : futures) {
                             future.cancel(true);
                         }
+                        if (request instanceof DoReduceRequest doReduceRequest)
+                            workersDestDirIds.add(doReduceRequest.getTask().getDestDirId());
+                        else if (request instanceof DoMapRequest doMapRequest)
+                            workersDestDirIds.add(doMapRequest.getTask().getDestDirId());
+                        else
+                            throw new AssertionError("Object is neither an instance of DoMapRequest or " +
+                                    "DoReduceRequest");
                         operationsDoneLatch.countDown();
                     } // else: some other worker's response has already been sent for that request, ignore
                 }
