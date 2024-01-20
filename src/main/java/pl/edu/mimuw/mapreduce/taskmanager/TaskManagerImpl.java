@@ -7,11 +7,14 @@ import io.grpc.ManagedChannel;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import org.apache.commons.io.IOUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
+import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
 import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
@@ -31,23 +34,24 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
+    public static final Logger LOGGER = LoggerFactory.getLogger(TaskManagerImpl.class);
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
     private final HealthStatusManager health;
-    private final Integer MAX_ATTEMPT = 3;
+    private final Integer MAX_ATTEMPT = -1;
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         this.health = health;
-        Utils.LOGGER.info("Worker service URI set to: " + workersUri);
+        LOGGER.info("Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
     }
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.info("Hello from TaskManager!");
+        LOGGER.info("Hello from TaskManager!");
 
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
@@ -59,7 +63,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
-        Utils.handleServerBreakerAction(responseObserver);
+//        Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("TM start processing batch");
         pool.execute(new BatchHandler(batch, responseObserver));
     }
 
@@ -68,7 +73,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         if (Utils.handleServerBreakerHealthCheckAction(responseObserver)) {
             return;
         }
-        Utils.LOGGER.trace("Received health check request");
+        LOGGER.trace("Received health check request");
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);
@@ -82,7 +87,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         if (Utils.handleServerBreakerInternalHealthCheckAction()) {
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
         }
-        Utils.LOGGER.warn("healthchecking not implemented");
+        LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
 
@@ -108,7 +113,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
             this.responseObserver = responseObserver;
-            this.splitsNum = 10;
+            this.splitsNum = 2;
             this.phaseDoneLatch = new CountDownLatch(splitsNum);
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
@@ -155,6 +160,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                 Task task = createMapTask();
 
+                storage.createDir(task.getDestDirId());
+
                 var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                 basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
                 ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
@@ -162,16 +169,17 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                         doMapRequest, 0, runningMaps, completedMaps), pool);
             }
-
+            LOGGER.info("Before ifStale phase.");
             try {
                 rescheduleIfStale(runningMaps, completedMaps, basicMap);
             } catch (InterruptedException e) {
+                LOGGER.info("ERROR after if stale.");
                 Utils.respondWithThrowable(e, responseObserver);
                 return;
             }
 
             // Concatenation phase
-
+            LOGGER.info("Got to concatenation phase.");
             List<Integer> fileIds = new ArrayList<>();
 
             assert !workersDestDirIds.isEmpty();
@@ -196,6 +204,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 fileIds.add(i);
             }
 
+            LOGGER.info("Got to reduce phase.");
             // Reduce phase
 
             phaseDoneLatch = new CountDownLatch(splitsNum);
@@ -265,7 +274,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 @Override
                 public void onSuccess(Response result) {
                     if (result.getStatusCode() == StatusCode.Err) {
-                        if (attempt > MAX_ATTEMPT) {
+                        if (attempt >= MAX_ATTEMPT) {
                             Utils.respondWithThrowable(new RuntimeException("Number of attempts for task was " +
                                     "exceeded"), responseObserver);
                             return;
@@ -294,9 +303,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-                    if (attempt > MAX_ATTEMPT) {
-                        Utils.respondWithThrowable(t, responseObserver);
-                    } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+//                    if (attempt > MAX_ATTEMPT) { // TODO
+//                        Utils.respondWithThrowable(t, responseObserver);
+//                    } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                 }
 
                 private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch,

@@ -79,8 +79,6 @@ public class ClientTest {
 
     @Test
     public void client_wholeSystemWorkingTest() throws Exception {
-        Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
-
         HealthStatusManager masterHealth = new HealthStatusManager();
         var masterServer = Utils.start_server(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI),
                 masterHealth, ClusterConfig.MASTERS_URI);
@@ -104,8 +102,8 @@ public class ClientTest {
         writeInputFileWithId(dataDirPath, "1", "a b c");
 
         storage.createDir("1");
-        TimeUnit.SECONDS.sleep(100);
 
+        masterServer.awaitTermination();
         workerServer.shutdownNow().awaitTermination();
         taskManagerServer.shutdownNow().awaitTermination();
         masterServer.shutdownNow().awaitTermination();

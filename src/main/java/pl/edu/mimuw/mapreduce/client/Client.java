@@ -66,7 +66,7 @@ public class Client {
         }
         String jsonFilePath = args[0];
 
-        ManagedChannel channel = Utils.createCustomClientChannelBuilder(ClusterConfig.TASK_MANAGERS_URI).build(); // IDK maybe add executor
+        ManagedChannel channel = Utils.createCustomClientChannelBuilder(ClusterConfig.MASTERS_URI).build();
 
         try {
             Client client = new Client(channel);

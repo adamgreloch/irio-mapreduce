@@ -3,6 +3,8 @@ package pl.edu.mimuw.mapreduce.worker;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
@@ -27,12 +29,13 @@ import static pl.edu.mimuw.proto.common.Task.TaskType.Map;
 import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheckable {
+    public static final Logger LOGGER = LoggerFactory.getLogger(WorkerImpl.class);
     private final Storage storage;
     private final ExecutorService pool;
     private final HealthStatusManager health;
 
     public static void start() throws IOException, InterruptedException {
-        Utils.LOGGER.info("Hello from Worker!");
+        LOGGER.info("Hello from Worker!");
 
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
@@ -48,22 +51,24 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
-        Utils.handleServerBreakerAction(responseObserver);
+//        Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("Worker start processing mapping: \n" + request.getTask());
         pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
-            return;
-        }
-        Utils.LOGGER.trace("Received health check request");
+//        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+//            return;
+//        }
+        LOGGER.trace("Received health check request");
         Utils.respondToHealthcheck(responseObserver, HealthStatusCode.Healthy);
     }
 
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
-        Utils.handleServerBreakerAction(responseObserver);
+//        Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("Worker start processing reduce: \n" + request.getTask());
         pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 
@@ -93,7 +98,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                     task.getInputDirId(), task.getDestDirId())) {
                 if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
-                Utils.LOGGER.trace("Performing map");
+                LOGGER.trace("Performing map");
                 processor.map();
 
                 Utils.respondWithSuccess(responseObserver);
@@ -110,7 +115,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                     task.getInputDirId(), task.getDestDirId())) {
                 if (task.getTaskType() != Reduce) throw new RuntimeException("Bad task type");
 
-                Utils.LOGGER.trace("Performing reduce");
+                LOGGER.trace("Performing reduce");
                 processor.reduce();
 
                 Utils.respondWithSuccess(responseObserver);
