@@ -64,11 +64,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
                             ClusterConfig.TASK_MANAGERS_URI)
                     .awaitTermination();
-        }else{
+        } else {
             TaskManagerImpl tm = tmBackup.get();
-            var server = Utils.start_server(tm,health, ClusterConfig.TASK_MANAGERS_URI);
+            var server = Utils.start_server(tm, health, ClusterConfig.TASK_MANAGERS_URI);
 
-            for(var batch : tm.processingBatches){
+            for (var batch : tm.processingBatches) {
                 tm.reRunButch(batch);
             }
 
@@ -89,6 +89,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
     private void reRunButch(Batch batch) {
         BatchHandler batchHandler = batchBatchHandlerMap.get(batch); //idK MOŻE NIE BYĆ USTAWIONE?
+        batchHandler.rerunHalfOfPhase = true;
         pool.execute(batchHandler);
     }
 
@@ -132,6 +133,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final Map<Long, DoReduceRequest> basicReduce; // First instance of request for provided Id from which we should mutate our request if we must redo it.
         private final Map<Long, Boolean> completedMaps;
         private final Map<Long, Boolean> completedReduces;
+        private boolean rerunHalfOfPhase;
         private List<Split> splits;
 
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
@@ -150,6 +152,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             this.basicReduce = new ConcurrentHashMap<>();
             this.concatDirId = UUID.randomUUID().toString();
             this.splits = new ArrayList<>();
+            this.rerunHalfOfPhase = false;
             storage.createDir(concatDirId);
         }
 
@@ -177,6 +180,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private void saveState(TMStatus status) {
             batchTMStatusMap.put(batch, status);
             storage.saveTMState(tmINSTANCE, ClusterConfig.POD_NAME);
+            rerunHalfOfPhase = false;
+        }
+
+        private void sendMap(DoMapRequest doMapRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
+            runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
         }
 
         @Override
@@ -186,23 +197,28 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_MAPS)) {
                 splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
                 for (Split split : splits) {
-                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
-
                     Task task = createMapTask();
 
                     storage.createDir(task.getDestDirId());
 
                     var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                     basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
-                    ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
-                    runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
-                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
-                            doMapRequest, 0, runningMaps, completedMaps), pool);
+                    sendMap(doMapRequest);
                 }
                 saveState(TMStatus.SENT_MAPS);
             }
 
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_MAPS_IF_STALE)) {
+                if (rerunHalfOfPhase) {
+                    var mapsToRerun = runningMaps.keySet();
+                    runningMaps.clear();
+                    phaseDoneLatch = new CountDownLatch(mapsToRerun.size());
+                    for (var taskId : mapsToRerun) {
+
+                        var doMapRequest = Utils.changeDestDirIdInTask(basicMap.get(taskId));
+                        sendMap(doMapRequest);
+                    }
+                }
                 try {
                     rescheduleIfStale(runningMaps, completedMaps, basicMap);
                 } catch (InterruptedException e) {
