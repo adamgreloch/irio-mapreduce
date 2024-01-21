@@ -132,6 +132,8 @@ public class WorkerImplTest {
         response = blockingStub.doReduce(doReduceRequest);
         System.out.println(response);
 
+        storage.removeReduceDuplicates("2");
+
         destDirDirPath = tempDirPath.resolve("2");
         output = readOutputFromFile(destDirDirPath, 0);
 
@@ -145,6 +147,7 @@ public class WorkerImplTest {
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();
+        storage.close();
     }
 
 }

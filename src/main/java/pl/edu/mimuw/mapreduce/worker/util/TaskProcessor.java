@@ -1,5 +1,6 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 
@@ -39,5 +40,6 @@ public abstract class TaskProcessor implements AutoCloseable {
     public void close() throws IOException {
         for (var binary : binaries.values())
             Files.delete(binary.toPath().toAbsolutePath());
+        Utils.removeDirRecursively(this.tempDir);
     }
 }

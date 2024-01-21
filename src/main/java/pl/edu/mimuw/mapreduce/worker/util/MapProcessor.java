@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Split;
@@ -14,6 +16,8 @@ import java.util.List;
 import java.util.concurrent.*;
 
 public class MapProcessor extends TaskProcessor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(MapProcessor.class);
+
     private final Split split;
     private static final ExecutorService pool = Executors.newCachedThreadPool();
     private final Semaphore mutex = new Semaphore(1);
@@ -65,12 +69,15 @@ public class MapProcessor extends TaskProcessor {
                     mutex.acquire();
                     pb.inheritIO().start().waitFor();
                     mutex.release();
+                    LOGGER.info("Partition phase finished on file: " + inputPath);
+                    LOGGER.info("Map/Partition finished on path: " + outputPath);
                 } else {
                     outputPath = files[1 - i % 2].getAbsolutePath();
                     pb.command(binary,
                             "-i", inputPath,
                             "-o", outputPath);
                     pb.inheritIO().start().waitFor();
+                    LOGGER.info("Map task finished on file: " + inputPath);
                 }
                 i++;
             }

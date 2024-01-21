@@ -7,7 +7,7 @@ import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.List;
 
-public interface Storage {
+public interface Storage extends AutoCloseable {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
 
     /* Reserved directory levels */

@@ -19,10 +19,9 @@ public class ReduceProcessor extends TaskProcessor {
     }
 
     public void reduce() throws ExecutionException, InterruptedException, IOException {
-        var fr = storage.getFile(dataDir, fileId);
-        var inputFile = copyInputFileToTempDir(fr);
-        var outputFile = Files.createFile(tempDir.resolve(fr.id() + "_2")).toFile();
-        var files = new File[]{inputFile, outputFile};
+        var inputFile = storage.getFile(dataDir, fileId);
+        var outputFile = Files.createFile(tempDir.resolve(inputFile.id() + "_2")).toFile();
+        var files = new File[]{inputFile.file(), outputFile};
 
         var pb = new ProcessBuilder();
         var i = 0;
