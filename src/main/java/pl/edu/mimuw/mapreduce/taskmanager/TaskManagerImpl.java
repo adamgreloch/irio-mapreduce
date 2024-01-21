@@ -40,8 +40,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
-    private final Integer MAX_ATTEMPT = -1;
-    private final Integer WORKER_TIMEOUT = 3; // Time after which task will be rerun in seconds.
+    private final Integer MAX_ATTEMPT = 3;
+    private final Integer WORKER_TIMEOUT = 30; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
@@ -94,7 +94,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private CountDownLatch phaseDoneLatch;
         private final int splitCount;
         private final AtomicInteger nextTaskId;
-        private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
         private final String concatDirId;
         // Each Key in this map is a Task.ID
@@ -113,7 +112,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             this.phaseDoneLatch = new CountDownLatch(splitCount);
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
-            this.reduceTaskCount = batch.getReduceBinIdsCount();
             this.runningMaps = new ConcurrentHashMap<>();
             this.runningReduces = new ConcurrentHashMap<>();
             this.completedMaps = new ConcurrentHashMap<>();
