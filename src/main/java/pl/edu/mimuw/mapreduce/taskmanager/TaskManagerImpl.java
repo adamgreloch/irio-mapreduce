@@ -149,95 +149,99 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
         @Override
         public void run() {
-
-            // Mapping phase
-
-            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
-            for (Split split : splits) {
-                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
-
-                Task task = createMapTask();
-
-                storage.createDir(task.getDestDirId());
-
-                var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
-                basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
-                ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
-                runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
-                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
-                        doMapRequest, 0, runningMaps, completedMaps), pool);
-            }
             try {
-                rescheduleIfStale(runningMaps, completedMaps, basicMap);
-            } catch (InterruptedException e) {
-                Utils.respondWithThrowable(e, responseObserver);
-                return;
-            }
 
-            // Concatenation phase
-            List<Integer> fileIds = new ArrayList<>();
+                // Mapping phase
 
-            assert !workersDestDirIds.isEmpty();
+                List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
+                for (Split split : splits) {
+                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-            for (int i = 0; i < batch.getRNum(); i++) {
-                File mergedFile = null;
+                    Task task = createMapTask();
+
+                    storage.createDir(task.getDestDirId());
+
+                    var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
+                    basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
+                    ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
+                    runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
+                            doMapRequest, 0, runningMaps, completedMaps), pool);
+                }
                 try {
-                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    rescheduleIfStale(runningMaps, completedMaps, basicMap);
+                } catch (InterruptedException e) {
+                    Utils.respondWithThrowable(e, responseObserver);
+                    return;
                 }
 
-                for (var workersDestDirId : workersDestDirIds) {
-                    try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
-                        File file = storage.getFile(workersDestDirId, i).file();
-                        try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
-                            IOUtils.copy(inputStream, outputStream);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
+                // Concatenation phase
+                List<Integer> fileIds = new ArrayList<>();
+
+                assert !workersDestDirIds.isEmpty();
+
+                for (int i = 0; i < batch.getRNum(); i++) {
+                    File mergedFile = null;
+                    try {
+                        mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
                     } catch (IOException e) {
-                        Utils.respondWithThrowable(e, responseObserver);
+                        throw new RuntimeException(e);
                     }
+
+                    for (var workersDestDirId : workersDestDirIds) {
+                        try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
+                            File file = storage.getFile(workersDestDirId, i).file();
+                            try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
+                                IOUtils.copy(inputStream, outputStream);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        } catch (IOException e) {
+                            Utils.respondWithThrowable(e, responseObserver);
+                        }
+                    }
+
+                    storage.putFile(concatDirId, i, mergedFile);
+                    fileIds.add(i);
                 }
 
-                storage.putFile(concatDirId, i, mergedFile);
-                fileIds.add(i);
-            }
+                // Reduce phase
 
-            // Reduce phase
+                phaseDoneLatch = new CountDownLatch(fileIds.size());
 
-            phaseDoneLatch = new CountDownLatch(fileIds.size());
+                assert fileIds.size() == batch.getRNum();
 
-            assert fileIds.size() == batch.getRNum();
+                for (var fileId : fileIds) {
+                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-            for (var fileId : fileIds) {
-                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+                    Task task = createReduceTask();
 
-                Task task = createReduceTask();
+                    var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
+                    basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
+                    ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+                    runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
+                            doReduceRequest, 0, runningReduces, completedReduces), pool);
+                }
 
-                var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
-                basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
-                ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
-                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
-                        doReduceRequest, 0, runningReduces, completedReduces), pool);
-            }
+                try {
+                    rescheduleIfStale(runningReduces, completedReduces, basicReduce);
+                } catch (InterruptedException e) {
+                    Utils.respondWithThrowable(e, responseObserver);
+                    return;
+                }
 
-            try {
-                rescheduleIfStale(runningReduces, completedReduces, basicReduce);
-            } catch (InterruptedException e) {
-                Utils.respondWithThrowable(e, responseObserver);
-                return;
-            }
+                storage.removeReduceDuplicates(batch.getFinalDestDirId());
 
-            storage.removeReduceDuplicates(batch.getFinalDestDirId());
+                Utils.respondWithSuccess(responseObserver);
 
-            Utils.respondWithSuccess(responseObserver);
+                // Cleanup phase
 
-            // Cleanup phase
-
-            for (var dir : workersDestDirIds) {
-                Utils.removeDirRecursively(Path.of(dir));
+                for (var dir : workersDestDirIds) {
+                    Utils.removeDirRecursively(Path.of(dir));
+                }
+            } catch (Exception e) {
+                throw new RuntimeException(e);
             }
         }
 
