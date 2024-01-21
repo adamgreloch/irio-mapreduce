@@ -26,10 +26,7 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -62,9 +59,22 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
-                        ClusterConfig.TASK_MANAGERS_URI)
-                .awaitTermination();
+        Optional<TaskManagerImpl> tmBackup = storage.retrieveTMState(ClusterConfig.POD_NAME);
+        if (tmBackup.isEmpty()) {
+            Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
+                            ClusterConfig.TASK_MANAGERS_URI)
+                    .awaitTermination();
+        }else{
+            TaskManagerImpl tm = tmBackup.get();
+            var server = Utils.start_server(tm,health, ClusterConfig.TASK_MANAGERS_URI);
+
+            for(var batch : tm.processingBatches){
+                tm.reRunButch(batch);
+            }
+
+            server.awaitTermination();
+        }
+
     }
 
     @Override
@@ -74,6 +84,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         BatchHandler batchHandler = new BatchHandler(batch, responseObserver);
         batchBatchHandlerMap.put(batch, batchHandler);
         batchTMStatusMap.put(batch, TMStatus.BEGINNING);
+        pool.execute(batchHandler);
+    }
+
+    private void reRunButch(Batch batch) {
+        BatchHandler batchHandler = batchBatchHandlerMap.get(batch); //idK MOŻE NIE BYĆ USTAWIONE?
         pool.execute(batchHandler);
     }
 
