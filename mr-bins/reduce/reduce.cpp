@@ -3,6 +3,8 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 void reduceFunction(const std::string& inputFilePath,
                     const std::string& outputFilePath) {
@@ -46,6 +48,9 @@ int main(int argc, char *argv[]) {
 
   std::string inputFilePath;
   std::string outputFilePath;
+
+    // Sleep for 10 seconds
+    std::this_thread::sleep_for(std::chrono::seconds(10));
 
   for (int i = 1; i < argc; i += 2) {
     if (std::string(argv[i]) == "-i") {

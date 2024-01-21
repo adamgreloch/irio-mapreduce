@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.master.MasterImpl;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
@@ -21,6 +22,7 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
@@ -99,7 +101,18 @@ public class ClientTest {
         var dataDirPath = storage.getDirPath("0");
 
         writeInputFileWithId(dataDirPath, "0", "a b c");
-        writeInputFileWithId(dataDirPath, "1", "a b c");
+        writeInputFileWithId(dataDirPath, "1", "d bi ooooooo c");
+        writeInputFileWithId(dataDirPath, "2", "d b beee c");
+        writeInputFileWithId(dataDirPath, "3", "d b beee beee  aaaa c");
+        writeInputFileWithId(dataDirPath, "4", "d affffffffff  ffc");
+        writeInputFileWithId(dataDirPath, "5", "a  j c j c j c j c j cj c");
+        writeInputFileWithId(dataDirPath, "6", "a beee c");
+        writeInputFileWithId(dataDirPath, "7", "a bbeee beee beee beee  c");
+        writeInputFileWithId(dataDirPath, "8", "a bbeee bee  e beee beee  c");
+        writeInputFileWithId(dataDirPath, "9", "a bbzzzz zzzzzzzzz beee  c");
+        writeInputFileWithId(dataDirPath, "10", "a bzzzz zzzzzzzzze beee  c");
+        writeInputFileWithId(dataDirPath, "11", "a bzzzz zzz zzzzzze beee  c");
+        writeInputFileWithId(dataDirPath, "12", "a bzzzzzzzz zzzzze beee  c");
 
         storage.createDir("1");
 
