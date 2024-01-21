@@ -22,11 +22,13 @@ public class MapProcessor extends TaskProcessor {
     private static final ExecutorService pool = Executors.newWorkStealingPool(8);
     private final Semaphore mutex = new Semaphore(1);
     private List<Future<Void>> futures = new ArrayList<>();
+    private final int rNum;
 
     public MapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
-                        String destDirId) throws IOException {
+                        String destDirId, int rNum) throws IOException {
         super(storage, binIds, dataDir, destDirId);
         this.split = split;
+        this.rNum = rNum;
     }
 
     public void map() throws ExecutionException, InterruptedException {
@@ -64,7 +66,7 @@ public class MapProcessor extends TaskProcessor {
                     LOGGER.info("Executing combine binary " + binary + " on file " + inputPath);
                     outputPath = storage.getDirPath(String.valueOf(destDirId)).toAbsolutePath().toString();
                     pb.command(binary,
-                            "-R", "1", // TODO
+                            "-R", String.valueOf(rNum),
                             "-i", inputPath,
                             "-o", outputPath);
                     mutex.acquire();

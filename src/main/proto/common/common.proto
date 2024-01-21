@@ -17,6 +17,9 @@ message Batch {
   repeated int64 reduce_bin_ids = 3; // binary IDs of reduce tasks
   string input_id = 4; // ID of range of data to batch-process
   string final_dest_dir_id = 5; // ID of directory with results
+
+  uint32 split_count = 6; // number of splits done on input data
+  uint32 r_num = 7; // number of files after partitioning
 }
 
 message Task {
@@ -30,9 +33,11 @@ message Task {
   string input_dir_id = 3; // directory ID of input data
   string dest_dir_id = 4; // processed files should be put to a location with this ID
 
+  uint32 r_num = 5; // number of files after partitioning
+
   // Binary IDs of map tasks and a partition binary at the end.
   // OR one binary ID of reduce task
-  repeated uint64 task_bin_ids = 5;
+  repeated uint64 task_bin_ids = 6;
 }
 
 message Split {

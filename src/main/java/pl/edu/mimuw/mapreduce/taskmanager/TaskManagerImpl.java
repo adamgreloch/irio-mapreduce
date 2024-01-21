@@ -14,7 +14,6 @@ import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
-import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
 import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
@@ -27,6 +26,7 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +93,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final Batch batch;
         private final StreamObserver<Response> responseObserver;
         private CountDownLatch phaseDoneLatch;
-        private final int splitsNum;
+        private final int splitCount;
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
@@ -110,8 +110,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
             this.responseObserver = responseObserver;
-            this.splitsNum = 2;
-            this.phaseDoneLatch = new CountDownLatch(splitsNum);
+            this.splitCount = batch.getSplitCount();
+            this.phaseDoneLatch = new CountDownLatch(splitCount);
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
             this.reduceTaskCount = batch.getReduceBinIdsCount();
@@ -131,6 +131,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .setTaskType(Task.TaskType.Map)
                     .setInputDirId(batch.getInputId())
                     .setDestDirId(UUID.randomUUID().toString())
+                    .setRNum(batch.getRNum())
                     .addAllTaskBinIds(batch.getMapBinIdsList())
                     .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
                     .build();
@@ -141,6 +142,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .setTaskId(nextTaskId.getAndIncrement())
                     .setTaskType(Task.TaskType.Reduce)
                     .setInputDirId(concatDirId)
+                    .setRNum(batch.getRNum())
                     .setDestDirId(batch.getFinalDestDirId())
                     .addAllTaskBinIds(batch.getReduceBinIdsList())
                     .build();
@@ -151,7 +153,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             // Mapping phase
 
-            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
+            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
             for (Split split : splits) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -207,6 +209,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             phaseDoneLatch = new CountDownLatch(fileIds.size());
 
+            assert fileIds.size() == batch.getRNum();
+
             for (var fileId : fileIds) {
                 var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -230,6 +234,12 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             storage.removeReduceDuplicates(batch.getFinalDestDirId());
 
             Utils.respondWithSuccess(responseObserver);
+
+            // Cleanup phase
+
+            for (var dir : workersDestDirIds) {
+                Utils.removeDirRecursively(Path.of(dir));
+            }
         }
 
         private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests,

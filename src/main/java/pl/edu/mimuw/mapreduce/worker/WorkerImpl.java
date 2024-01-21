@@ -95,7 +95,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             var task = request.getTask();
 
             try (var processor = new MapProcessor(storage, split, task.getTaskBinIdsList(),
-                    task.getInputDirId(), task.getDestDirId())) {
+                    task.getInputDirId(), task.getDestDirId(), task.getRNum())) {
                 if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
                 LOGGER.info("Performing map");
