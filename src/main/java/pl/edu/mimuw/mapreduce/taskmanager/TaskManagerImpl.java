@@ -90,6 +90,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private void reRunButch(Batch batch) {
         BatchHandler batchHandler = batchBatchHandlerMap.get(batch); //idK MOŻE NIE BYĆ USTAWIONE?
         batchHandler.rerunHalfOfPhase = true;
+        batchHandler.concatDirId = UUID.randomUUID().toString();
         pool.execute(batchHandler);
     }
 
@@ -124,7 +125,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
-        private final String concatDirId;
+        private String concatDirId;
         // Each Key in this map is a Task.ID
         private final Map<Long, List<ListenableFuture<Response>>> runningMaps;
         private final Map<Long, List<ListenableFuture<Response>>> runningReduces;
@@ -190,6 +191,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
         }
 
+        private void sendReduce(DoReduceRequest doReduceRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+            runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
+        }
+
         @Override
         public void run() {
 
@@ -219,6 +227,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         sendMap(doMapRequest);
                     }
                 }
+
                 try {
                     rescheduleIfStale(runningMaps, completedMaps, basicMap);
                 } catch (InterruptedException e) {
@@ -230,6 +239,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             List<Integer> fileIds = new ArrayList<>();
 
             // Concatenation phase
+            // If we rerun we must complete this in full, no more staring from middle.
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.FINISHED_CONCATENATION)) {
                 assert !workersDestDirIds.isEmpty();
 
@@ -280,6 +290,17 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             }
 
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_REDUCES_IF_STALE)) {
+                if (rerunHalfOfPhase) {
+                    var reducesToRerun = runningReduces.keySet();
+                    runningReduces.clear();
+                    phaseDoneLatch = new CountDownLatch(reducesToRerun.size());
+                    for (var taskId : reducesToRerun) {
+
+                        var doReduceRequest = basicReduce.get(taskId);
+                        sendReduce(doReduceRequest);
+                    }
+                }
+
                 try {
                     rescheduleIfStale(runningReduces, completedReduces, basicReduce);
                 } catch (InterruptedException e) {
