@@ -275,10 +275,17 @@ class DistrStorageTest {
         Files.createFile(filePath3);
         Files.createFile(filePath4);
 
-        storage.removeReduceDuplicates(dirId);
+        String finalDestDirId = "2";
 
-        var uniqueFile1 = tmpDirPath.resolve(dirId).resolve("1");
-        var uniqueFile2 = tmpDirPath.resolve(dirId).resolve("2");
+        storage.moveUniqueReduceResultsToDestDir(dirId, finalDestDirId);
+
+        var uniqueFile1 = tmpDirPath.resolve(finalDestDirId).resolve("1");
+        var uniqueFile2 = tmpDirPath.resolve(finalDestDirId).resolve("2");
+
+        filePath1 = tmpDirPath.resolve(finalDestDirId).resolve("1_R_pod1");
+        filePath2 = tmpDirPath.resolve(finalDestDirId).resolve("1_R_pod2");
+        filePath3 = tmpDirPath.resolve(finalDestDirId).resolve("1_R_pod1_duplicate");
+        filePath4 = tmpDirPath.resolve(finalDestDirId).resolve("2_R_pod1");
 
         assertFalse(Files.exists(filePath1));
         assertFalse(Files.exists(filePath2));

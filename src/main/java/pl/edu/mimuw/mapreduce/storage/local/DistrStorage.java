@@ -205,9 +205,11 @@ public class DistrStorage implements Storage {
     }
 
     @Override
-    public void removeReduceDuplicates(String dirId) {
+    public void moveUniqueReduceResultsToDestDir(String reduceDirId, String finalDestDir) {
         Set<String> fileNamesPrefixes = new HashSet<>();
-        try (Stream<Path> stream = Files.list(storagePath.resolve(dirId))) {
+        createDir(finalDestDir);
+        var destDirPath = getDirPath(finalDestDir);
+        try (Stream<Path> stream = Files.list(storagePath.resolve(reduceDirId))) {
             List<Path> files = stream.toList();
             for (Path path : files) {
                 String fileName = path.getFileName().toString();
@@ -217,7 +219,7 @@ public class DistrStorage implements Storage {
                     Files.delete(path);
                 } else {
                     fileNamesPrefixes.add(fileNamePrefix);
-                    Files.move(path, path.getParent().resolve(fileNamePrefix));
+                    Files.move(path, destDirPath.resolve(fileNamePrefix));
                 }
             }
         } catch (Exception e) {

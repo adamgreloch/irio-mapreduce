@@ -135,9 +135,10 @@ public class WorkerImplTest {
         response = blockingStub.doReduce(doReduceRequest);
         System.out.println(response);
 
-        storage.removeReduceDuplicates("2");
+        storage.createDir("3");
+        storage.moveUniqueReduceResultsToDestDir("2", "3");
 
-        destDirDirPath = tempDirPath.resolve("2");
+        destDirDirPath = tempDirPath.resolve("3");
         output = readOutputFromFile(destDirDirPath, 0);
 
         assertEquals("""

@@ -47,5 +47,5 @@ public interface Storage extends AutoCloseable {
 
     String retrieveState(String podId);
 
-    void removeReduceDuplicates(String dirId);
+    void moveUniqueReduceResultsToDestDir(String reduceDirId, String finalDestDir);
 }
