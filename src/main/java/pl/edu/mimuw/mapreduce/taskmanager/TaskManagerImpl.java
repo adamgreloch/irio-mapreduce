@@ -41,7 +41,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
     private final Integer MAX_ATTEMPT = -1;
-    private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
+    private final Integer WORKER_TIMEOUT = 3; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
@@ -206,7 +206,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 }
 
                 // Reduce phase
-
+                LOGGER.info("TM - got to reduce phase.");
                 phaseDoneLatch = new CountDownLatch(fileIds.size());
 
                 assert fileIds.size() == batch.getRNum();
@@ -253,6 +253,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 latchStatus = phaseDoneLatch.await(WORKER_TIMEOUT, TimeUnit.SECONDS);
                 if (!latchStatus) {
                     for (var taskId : runningRequests.keySet()) { // resend still running reduces
+                        LOGGER.info("TM - taskID: " + taskId + " is stale resending.");
+
                         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
                         ListenableFuture<Response> listenableFuture;
@@ -315,7 +317,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 @Override
                 public void onFailure(Throwable t) {
                     if (attempt >= MAX_ATTEMPT) {
-                        Utils.respondWithThrowable(t, responseObserver);
+                        if(t.getClass() == CancellationException.class){
+                            return;
+                        }
+                        Utils.respondWithThrowable(t, responseObserver); //TODO jak cancelujemy future to się to wysyłą i to jest problem
                     } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                 }
 
@@ -331,7 +336,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     } else
                         throw new AssertionError("Object is neither an instance of DoMapRequest or " +
                                 "DoReduceRequest");
-
+                    LOGGER.info("TM - rerunning request. Attempt nr: " + attempt + "| request \n" + request);
                     Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
                             operationsDoneLatch, request, attempt + 1, runningRequests, completedRequests), pool);
                 }

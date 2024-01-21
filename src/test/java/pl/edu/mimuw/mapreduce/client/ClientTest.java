@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.master.MasterImpl;
+import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
@@ -21,6 +22,7 @@ import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
 import pl.edu.mimuw.proto.master.MasterGrpc;
+import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;

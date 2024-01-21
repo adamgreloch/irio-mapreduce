@@ -13,6 +13,7 @@ import pl.edu.mimuw.mapreduce.worker.util.Either;
 import pl.edu.mimuw.mapreduce.worker.util.MapProcessor;
 import pl.edu.mimuw.mapreduce.worker.util.ReduceProcessor;
 import pl.edu.mimuw.proto.common.Response;
+import pl.edu.mimuw.proto.common.StatusCode;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.Ping;
 import pl.edu.mimuw.proto.healthcheck.PingResponse;
