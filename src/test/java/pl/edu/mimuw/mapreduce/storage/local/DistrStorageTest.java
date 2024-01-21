@@ -277,10 +277,15 @@ class DistrStorageTest {
 
         storage.removeReduceDuplicates(dirId);
 
-        assertTrue(Files.exists(filePath3));
+        var uniqueFile1 = tmpDirPath.resolve(dirId).resolve("1");
+        var uniqueFile2 = tmpDirPath.resolve(dirId).resolve("2");
+
         assertFalse(Files.exists(filePath1));
         assertFalse(Files.exists(filePath2));
-        assertTrue(Files.exists(filePath4));
+        assertFalse(Files.exists(filePath3));
+        assertFalse(Files.exists(filePath4));
+        assertTrue(Files.exists(uniqueFile1));
+        assertTrue(Files.exists(uniqueFile2));
     }
 }
 

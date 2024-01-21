@@ -85,7 +85,6 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         if (Utils.handleServerBreakerInternalHealthCheckAction()) {
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
         }
-        LOGGER.warn("healthchecking not implemented");
         return PingResponse.getDefaultInstance();
     }
 

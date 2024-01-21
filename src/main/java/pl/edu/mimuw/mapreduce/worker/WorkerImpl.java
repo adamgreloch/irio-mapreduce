@@ -1,6 +1,5 @@
 package pl.edu.mimuw.mapreduce.worker;
 
-import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
@@ -125,9 +124,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
         }
 
         public void run() {
-            health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
             eitherMapOrReduce.apply(this::processMap, this::processReduce);
-            health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
     }
 }
