@@ -1,13 +1,14 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.proto.common.Split;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -57,7 +58,7 @@ public class DistrStorage implements Storage {
         File fileCopy;
         try {
             fileCopy = Files.copy(file.toPath(), Paths.get((tmpStorage.resolve(dirPath).resolve(filePath)).toString()))
-                            .toFile();
+                    .toFile();
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -150,7 +151,9 @@ public class DistrStorage implements Storage {
             private long current = split.getBeg();
 
             @Override
-            public boolean hasNext() {return current <= split.getEnd();} // NOTE: end bound is inclusive
+            public boolean hasNext() {
+                return current <= split.getEnd();
+            } // NOTE: end bound is inclusive
 
             @Override
             public Path next() {
@@ -201,7 +204,7 @@ public class DistrStorage implements Storage {
     public void removeReduceDuplicates(String dirId) {
         createDir(dirId);
         Set<String> fileNamesPrefixes = new HashSet<>();
-        try(Stream<Path> files = Files.list(Paths.get(storagePath.resolve(dirId).toString()))) {
+        try (Stream<Path> files = Files.list(Paths.get(storagePath.resolve(dirId).toString()))) {
             files.forEach(path -> {
                 String fileName = path.getFileName().toString();
                 int firstUnderscoreIndex = fileName.indexOf("_");
@@ -219,6 +222,37 @@ public class DistrStorage implements Storage {
             });
         } catch (Exception e) {
             throw new IllegalStateException("Cannot remove reduce duplicates in dir: " + dirId);
+        }
+    }
+
+    @Override
+    public void saveTMState(TaskManagerImpl TM, String podName) {
+        createDir(storagePath.resolve(STATE_DIR).toString());
+        try {
+            Path path = Files.createFile(storagePath.resolve(STATE_DIR).resolve(podName));
+            FileOutputStream fileOutputStream = new FileOutputStream(path.toFile());
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
+
+            objectOutputStream.writeObject(TM);
+            objectOutputStream.flush();
+            objectOutputStream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public Optional<TaskManagerImpl> retrieveTMState(String podName) {
+        try {
+            File file = new File(String.valueOf(storagePath.resolve(STATE_DIR).resolve(podName)));
+            FileInputStream fileInputStream = new FileInputStream(file);
+            ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
+
+            TaskManagerImpl tm = (TaskManagerImpl) objectInputStream.readObject();
+            objectInputStream.close();
+            return Optional.of(tm);
+        } catch (IOException | ClassNotFoundException e) {
+            return Optional.empty();
         }
     }
 }

@@ -2,7 +2,6 @@ package pl.edu.mimuw.mapreduce.taskmanager;
 
 public enum TMStatus {
     BEGINNING(0),
-    AFTER_SPLITS(1),
     SENT_MAPS(2),
     RESCHEDULED_MAPS_IF_STALE(3),
     FINISHED_CONCATENATION(4),
@@ -20,7 +19,7 @@ public enum TMStatus {
         return level;
     }
 
-    public boolean fartherThan(TMStatus status) {
+    public boolean furtherThan(TMStatus status) {
         return this.level < status.level;
     }
 }

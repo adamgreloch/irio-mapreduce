@@ -14,7 +14,6 @@ import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.common.HealthCheckable;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
-import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
 import pl.edu.mimuw.proto.common.*;
 import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
 import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
@@ -36,6 +35,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable, Serializable {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskManagerImpl.class);
+    private final TaskManagerImpl tmINSTANCE;
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
@@ -44,6 +44,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
     private final List<Batch> processingBatches;
     private final Map<Batch, TMStatus> batchTMStatusMap;
+    private final Map<Batch, BatchHandler> batchBatchHandlerMap;
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
@@ -51,6 +52,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
         this.processingBatches = new ArrayList<>();
         this.batchTMStatusMap = new ConcurrentHashMap<>();
+        this.batchBatchHandlerMap = new ConcurrentHashMap<>();
+        this.tmINSTANCE = this;
     }
 
     public static void start() throws IOException, InterruptedException {
@@ -68,8 +71,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
         processingBatches.add(batch);
+        BatchHandler batchHandler = new BatchHandler(batch, responseObserver);
+        batchBatchHandlerMap.put(batch, batchHandler);
         batchTMStatusMap.put(batch, TMStatus.BEGINNING);
-        pool.execute(new BatchHandler(batch, responseObserver));
+        pool.execute(batchHandler);
     }
 
     @Override
@@ -95,7 +100,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         return PingResponse.getDefaultInstance();
     }
 
-    class BatchHandler implements Runnable {
+    class BatchHandler implements Runnable, Serializable {
         private final Batch batch;
         private final StreamObserver<Response> responseObserver;
         private CountDownLatch phaseDoneLatch;
@@ -154,16 +159,17 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .build();
         }
 
+        private void saveState(TMStatus status) {
+            batchTMStatusMap.put(batch, status);
+            storage.saveTMState(tmINSTANCE, ClusterConfig.POD_NAME);
+        }
+
         @Override
         public void run() {
 
             // Mapping phase
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.AFTER_SPLITS)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_MAPS)) {
                 splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
-                batchTMStatusMap.put(batch, TMStatus.AFTER_SPLITS);
-            }
-
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.SENT_MAPS)) {
                 for (Split split : splits) {
                     var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -178,22 +184,22 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                             doMapRequest, 0, runningMaps, completedMaps), pool);
                 }
-                batchTMStatusMap.put(batch, TMStatus.SENT_MAPS);
+                saveState(TMStatus.SENT_MAPS);
             }
 
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.RESCHEDULED_MAPS_IF_STALE)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_MAPS_IF_STALE)) {
                 try {
                     rescheduleIfStale(runningMaps, completedMaps, basicMap);
                 } catch (InterruptedException e) {
                     Utils.respondWithThrowable(e, responseObserver);
                     return;
                 }
-                batchTMStatusMap.put(batch, TMStatus.RESCHEDULED_MAPS_IF_STALE);
+                saveState(TMStatus.RESCHEDULED_MAPS_IF_STALE);
             }
             List<Integer> fileIds = new ArrayList<>();
 
             // Concatenation phase
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.FINISHED_CONCATENATION)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.FINISHED_CONCATENATION)) {
                 assert !workersDestDirIds.isEmpty();
 
                 for (int i = 0; i < reduceTaskCount; i++) {
@@ -220,11 +226,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     storage.putFile(concatDirId, i, mergedFile);
                     fileIds.add(i);
                 }
-                batchTMStatusMap.put(batch, TMStatus.FINISHED_CONCATENATION);
+                saveState(TMStatus.FINISHED_CONCATENATION);
             }
 
             // Reduce phase
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.SENT_REDUCES)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_REDUCES)) {
                 phaseDoneLatch = new CountDownLatch(fileIds.size());
 
                 for (var fileId : fileIds) {
@@ -239,25 +245,25 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
                             doReduceRequest, 0, runningReduces, completedReduces), pool);
                 }
-                batchTMStatusMap.put(batch, TMStatus.SENT_REDUCES);
+                saveState(TMStatus.SENT_REDUCES);
             }
 
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.RESCHEDULED_REDUCES_IF_STALE)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_REDUCES_IF_STALE)) {
                 try {
                     rescheduleIfStale(runningReduces, completedReduces, basicReduce);
                 } catch (InterruptedException e) {
                     Utils.respondWithThrowable(e, responseObserver);
                     return;
                 }
-                batchTMStatusMap.put(batch, TMStatus.RESCHEDULED_REDUCES_IF_STALE);
+                saveState(TMStatus.RESCHEDULED_REDUCES_IF_STALE);
             }
 
-            if (!batchTMStatusMap.get(batch).fartherThan(TMStatus.FINISHED)) {
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.FINISHED)) {
                 storage.removeReduceDuplicates(batch.getFinalDestDirId());
                 processingBatches.remove(batch);
 
                 Utils.respondWithSuccess(responseObserver);
-                batchTMStatusMap.put(batch, TMStatus.FINISHED);
+                saveState(TMStatus.FINISHED);
             }
         }
 
