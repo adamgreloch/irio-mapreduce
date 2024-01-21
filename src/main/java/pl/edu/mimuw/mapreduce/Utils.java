@@ -23,12 +23,18 @@ import pl.edu.mimuw.proto.processbreaker.Action;
 import pl.edu.mimuw.proto.processbreaker.Payload;
 import pl.edu.mimuw.proto.worker.DoMapRequest;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class Utils {
     public static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
@@ -213,5 +219,21 @@ public class Utils {
         return DoMapRequest.newBuilder().mergeFrom(request).setTask(
                 Task.newBuilder().mergeFrom(request.getTask()).setDestDirId(UUID.randomUUID().toString()).build()
         ).build();
+    }
+
+    public static String readOutputFromFile(Path dirPath, long fileId) throws IOException {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
+            // Iterate over files in the directory that start with fileId
+            for (Path filePath : stream) {
+                // Check if the file name starts with fileId
+                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
+                    // Read the content of the file
+                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
+                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+                    }
+                }
+            }
+        }
+        throw new IOException("File not found for fileId: " + fileId);
     }
 }

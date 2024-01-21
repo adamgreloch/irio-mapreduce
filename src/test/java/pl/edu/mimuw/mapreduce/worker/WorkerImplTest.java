@@ -70,22 +70,6 @@ public class WorkerImplTest {
         storage.putFile(Storage.BINARY_DIR, binId, binary);
     }
 
-    String readOutputFromFile(Path dirPath, long fileId) throws IOException {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
-            // Iterate over files in the directory that start with fileId
-            for (Path filePath : stream) {
-                // Check if the file name starts with fileId
-                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
-                    // Read the content of the file
-                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
-                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
-                    }
-                }
-            }
-        }
-        throw new IOException("File not found for fileId: " + fileId);
-    }
-
     @Test
     public void workerImpl_correctlyDoesATask() throws Exception {
         loadBinaryFromResource("map", 0);
@@ -119,7 +103,7 @@ public class WorkerImplTest {
         assertEquals(StatusCode.Ok, response.getStatusCode());
 
         var destDirDirPath = tempDirPath.resolve("1");
-        var output = readOutputFromFile(destDirDirPath, 0);
+        var output = Utils.readOutputFromFile(destDirDirPath, 0);
 
         assertEquals("""
                 a 1
@@ -145,7 +129,7 @@ public class WorkerImplTest {
         System.out.println(response);
 
         destDirDirPath = tempDirPath.resolve("2");
-        output = readOutputFromFile(destDirDirPath, 0);
+        output = Utils.readOutputFromFile(destDirDirPath, 0);
 
         assertEquals("""
                 a 2

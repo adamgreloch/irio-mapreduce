@@ -72,22 +72,6 @@ public class ClientTest {
         storage.putFile(Storage.BINARY_DIR, binId, binary);
     }
 
-    String readOutputFromFile(Path dirPath, long fileId) throws IOException {
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
-            // Iterate over files in the directory that start with fileId
-            for (Path filePath : stream) {
-                // Check if the file name starts with fileId
-                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
-                    // Read the content of the file
-                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
-                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
-                    }
-                }
-            }
-        }
-        throw new IOException("File not found for fileId: " + fileId);
-    }
-
     @Test
     public void client_wholeSystemWorkingTest() throws Exception {
         HealthStatusManager masterHealth = new HealthStatusManager();
@@ -119,7 +103,7 @@ public class ClientTest {
         Client.main(new String[]{path});
         Thread.sleep(2000);
 
-        var output = readOutputFromFile(tempDirPath.resolve("1"), 0);
+        var output = Utils.readOutputFromFile(tempDirPath.resolve("1"), 0);
         assertEquals("""
                 a 2
                 b 2
@@ -127,10 +111,10 @@ public class ClientTest {
 
         // nastepny task - zmienic binarke ze sleepem, zajebac workera i sprawdzic czy drugi worker zadziala
 
+
         masterServer.shutdownNow().awaitTermination();
         workerServer.shutdownNow().awaitTermination();
         taskManagerServer.shutdownNow().awaitTermination();
-        masterServer.shutdownNow().awaitTermination();
     }
 
     @AfterAll
