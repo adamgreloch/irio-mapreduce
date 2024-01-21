@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
@@ -15,9 +17,14 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 
 /* NOTE: We assume that the argument-directories already exist */
 public class DistrStorage implements Storage {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DistrStorage.class);
+
     private final Path storagePath;
     private Path tmpStorage;
 
@@ -35,7 +42,7 @@ public class DistrStorage implements Storage {
             Files.createDirectories(this.storagePath.resolve(BINARY_DIR));
             Files.createDirectories(this.storagePath.resolve(STATE_DIR));
 
-            Utils.LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
+            LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
 
             this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
         } catch (IOException e) {
@@ -48,35 +55,32 @@ public class DistrStorage implements Storage {
     }
 
     @Override
+    public File getBinary(long fileId) {
+        var binPath = storagePath.resolve(BINARY_DIR).resolve(String.valueOf(fileId));
+        LOGGER.info("Accessing binary " + fileId + " under " + binPath);
+        return binPath.toFile();
+    }
+
+    @Override
     public FileRep getFile(String dirId, long fileId) {
-        Path dirPath = storagePath.resolve(dirId);
-        Path filePath = dirPath.resolve(String.valueOf(fileId));
-        File file = new File(filePath.toString());
-        if (!file.exists()) {
-            throw new IllegalStateException("File does not exist: " + file);
-        }
-        File fileCopy;
-        try {
-            fileCopy = Files.copy(file.toPath(), Paths.get((tmpStorage.resolve(dirPath).resolve(filePath)).toString()))
-                    .toFile();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        return new LocalFileRep(fileCopy, fileId);
+        return getFile(storagePath.resolve(dirId).resolve(String.valueOf(fileId)));
     }
 
     @Override
     public FileRep getFile(Path path) {
-        File file = new File(path.toString());
-        if (!file.exists()) {
-            throw new IllegalStateException("File does not exist: " + file);
-        }
         try {
-            Files.copy(file.toPath(), Paths.get((tmpStorage.resolve(path)).toString()));
+            if (!Files.exists(path)) {
+                throw new IllegalStateException("File does not exist under path: " + path);
+            }
+            var fileId = path.getFileName().toString();
+            var tmpDirPath = tmpStorage.resolve(path.getParent().getFileName());
+            Files.createDirectories(tmpDirPath);
+            Path copyPath = Files.copy(path, tmpDirPath.resolve(fileId), COPY_ATTRIBUTES, REPLACE_EXISTING);
+            LOGGER.info("Downloaded file " + path + " to local " + copyPath);
+            return new LocalFileRep(copyPath.toFile(), Long.parseLong(fileId));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        return new LocalFileRep(file, Long.parseLong(path.getFileName().toString()));
     }
 
     @Override
@@ -100,7 +104,8 @@ public class DistrStorage implements Storage {
     public void putFile(String dirId, long fileId, File file) {
         try {
             createDir(dirId);
-            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()));
+            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId))
+                                                                            .toString()));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -110,7 +115,7 @@ public class DistrStorage implements Storage {
     public void putReduceFile(String dirId, long fileId, String authorId, File file) {
         try {
             createDir(dirId);
-            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(fileId + "_R_" + authorId).toString()));
+            Files.copy(file.toPath(), getDirPath(dirId).resolve(fileId + "_R_" + authorId));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -208,16 +213,16 @@ public class DistrStorage implements Storage {
             files.forEach(path -> {
                 String fileName = path.getFileName().toString();
                 int firstUnderscoreIndex = fileName.indexOf("_");
-                int secondUnderscoreIndex = fileName.indexOf("_", firstUnderscoreIndex + 1);
-                String fileNamePrefix = fileName.substring(0, secondUnderscoreIndex);
-                if (fileNamesPrefixes.contains(fileNamePrefix)) {
-                    try {
+                String fileNamePrefix = fileName.substring(0, firstUnderscoreIndex);
+                try {
+                    if (fileNamesPrefixes.contains(fileNamePrefix)) {
                         Files.delete(path);
-                    } catch (IOException e) {
-                        throw new IllegalStateException("Cannot remove reduce duplicates in dir: " + dirId);
+                    } else {
+                        fileNamesPrefixes.add(fileNamePrefix);
+                        Files.move(path, path.getParent().resolve(fileNamePrefix));
                     }
-                } else {
-                    fileNamesPrefixes.add(fileNamePrefix);
+                } catch (IOException e) {
+                    throw new IllegalStateException("Cannot remove reduce duplicates in dir: " + dirId);
                 }
             });
         } catch (Exception e) {
@@ -254,6 +259,11 @@ public class DistrStorage implements Storage {
         } catch (IOException | ClassNotFoundException e) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public void close() throws Exception {
+        Utils.removeDirRecursively(this.tmpStorage);
     }
 }
 

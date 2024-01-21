@@ -27,6 +27,11 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 import java.io.*;
 import java.nio.file.Files;
 import java.util.*;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -121,7 +126,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final Batch batch;
         private final StreamObserver<Response> responseObserver;
         private CountDownLatch phaseDoneLatch;
-        private final int splitsNum;
+        private final int splitCount;
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
@@ -140,8 +145,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
             this.responseObserver = responseObserver;
-            this.splitsNum = 2;
-            this.phaseDoneLatch = new CountDownLatch(splitsNum);
+            this.splitCount = batch.getSplitCount();
+            this.phaseDoneLatch = new CountDownLatch(splitCount);
             this.nextTaskId = new AtomicInteger(0);
             this.workersDestDirIds = new ArrayList<>();
             this.reduceTaskCount = batch.getReduceBinIdsCount();
@@ -163,6 +168,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .setTaskType(Task.TaskType.Map)
                     .setInputDirId(batch.getInputId())
                     .setDestDirId(UUID.randomUUID().toString())
+                    .setRNum(batch.getRNum())
                     .addAllTaskBinIds(batch.getMapBinIdsList())
                     .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
                     .build();
@@ -173,6 +179,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .setTaskId(nextTaskId.getAndIncrement())
                     .setTaskType(Task.TaskType.Reduce)
                     .setInputDirId(concatDirId)
+                    .setRNum(batch.getRNum())
                     .setDestDirId(batch.getFinalDestDirId())
                     .addAllTaskBinIds(batch.getReduceBinIdsList())
                     .build();
@@ -203,7 +210,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             // Mapping phase
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_MAPS)) {
-                splits = storage.getSplitsForDir(batch.getInputId(), splitsNum);
+                splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
                 for (Split split : splits) {
                     Task task = createMapTask();
 
@@ -274,6 +281,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_REDUCES)) {
                 phaseDoneLatch = new CountDownLatch(fileIds.size());
 
+            assert fileIds.size() == batch.getRNum();
+
                 for (var fileId : fileIds) {
                     var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -314,7 +323,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 storage.removeReduceDuplicates(batch.getFinalDestDirId());
                 processingBatches.remove(batch);
 
-                Utils.respondWithSuccess(responseObserver);
+            Utils.respondWithSuccess(responseObserver);
+
+            // Cleanup phase
+
+            for (var dir : workersDestDirIds) {
+                Utils.removeDirRecursively(Path.of(dir));
+            }
                 saveState(TMStatus.FINISHED);
             }
         }

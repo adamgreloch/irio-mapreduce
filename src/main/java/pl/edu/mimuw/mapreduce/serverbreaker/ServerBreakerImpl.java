@@ -9,7 +9,7 @@ import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 
 public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImplBase {
     private static volatile ServerBreakerImpl instance;
-    private Payload payload; // IDK, czy to volatile nie powinno być.
+    private Payload payload; // FIXME volatile?
 
     private ServerBreakerImpl() {
         this.payload = Payload.newBuilder().setAction(Action.NONE).build();

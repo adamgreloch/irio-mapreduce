@@ -100,11 +100,16 @@ subprojects {
                     url = 'us-central1-docker.pkg.dev'
                 }
                 javaApplication {
-                    baseImage = 'openjdk:17'
+                    baseImage = 'openjdk:17-alpine'
                     maintainer = 'Adam Greloch "a.greloch@student.uw.edu.pl"'
                     jvmArgs = ['-Xms256m', '-Xmx2048m']
                 }
             }
+
+            dockerCreateDockerfile {
+                instruction 'RUN apk upgrade --no-cache && apk add --no-cache libgcc libstdc++'
+            }
+
         }
     }
 }

@@ -9,7 +9,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Optional;
 
-public interface Storage {
+public interface Storage extends AutoCloseable {
     /* Storage can organize normal files (mapreduce data) in flat directories. */
 
     /* Reserved directory levels */
@@ -22,6 +22,8 @@ public interface Storage {
     FileRep getFile(String dirId, long fileId);
 
     FileRep getFile(Path path);
+
+    File getBinary(long fileId);
 
     Path getDirPath(String dirId);
 

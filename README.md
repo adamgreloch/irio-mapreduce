@@ -7,14 +7,18 @@ Kubernetes-based distributed MapReduce system.
 ## Assumptions
 
 Not following these assumptions leads to disaster, make sure your binaries
-strictly follow these. We assume that the client provides the following binaries:
+strictly follow these. 
 
-### Map binary
+We assume that the client provides the following **statically linked** binaries:
+
+### Map
 ```
 ./map -i <input_file_path> -o <output_file_path>
 ```
 Behaviour: forms a list of pairs (key, some value) based on the input file
 contents and saves it to the output file specified by path
+
+You can assume that the output_file_path is not accessed by anyone else.
 
 ### Partitioner
 ```
@@ -36,6 +40,8 @@ where new_value is an aggregate of all values from pairs.
 
 Input files do not need to be sorted. There is a guarantee that 
 all values for a given key are in the input file.
+
+You can assume that the output_file_path is not accessed by anyone else.
 
 ## Build
 

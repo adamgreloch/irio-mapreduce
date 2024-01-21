@@ -7,6 +7,7 @@ import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -75,6 +76,7 @@ public class WorkerImplTest {
     }
 
     @Test
+    @DisplayName("Worker correctly processes a simple batch")
     public void workerImpl_correctlyDoesATask() throws Exception {
         loadBinaryFromResource("map", 0);
         loadBinaryFromResource("partition", 1);
@@ -95,6 +97,7 @@ public class WorkerImplTest {
                        .setTaskType(Task.TaskType.Map)
                        .setInputDirId("0")
                        .setDestDirId("1")
+                        .setRNum(1)
                        .addAllTaskBinIds(taskBinIds)
                        .build();
 
@@ -132,6 +135,8 @@ public class WorkerImplTest {
         response = blockingStub.doReduce(doReduceRequest);
         System.out.println(response);
 
+        storage.removeReduceDuplicates("2");
+
         destDirDirPath = tempDirPath.resolve("2");
         output = readOutputFromFile(destDirDirPath, 0);
 
@@ -145,6 +150,7 @@ public class WorkerImplTest {
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();
+        storage.close();
     }
 
 }

@@ -25,6 +25,7 @@ import pl.edu.mimuw.proto.worker.DoMapRequest;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -61,6 +62,10 @@ public class Utils {
                 }
             }
         }
+    }
+
+    public static void removeDirRecursively(Path dirPath) {
+        removeDirRecursively(dirPath.toFile());
     }
 
     public static void removeDirRecursively(File directoryToBeDeleted) {
