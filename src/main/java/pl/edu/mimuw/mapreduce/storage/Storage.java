@@ -19,6 +19,8 @@ public interface Storage extends AutoCloseable {
 
     FileRep getFile(Path path);
 
+    File getBinary(long fileId);
+
     Path getDirPath(String dirId);
 
     void createDir(String dirId);

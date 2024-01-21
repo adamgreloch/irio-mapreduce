@@ -52,7 +52,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
-        LOGGER.info("Worker start processing mapping: \n" + request.getTask());
+        LOGGER.info("Received DoMapRequest " + request);
         pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
@@ -68,6 +68,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("Received DoReduceRequest on fileId: " + request.getFileId() + "\n" + request);
         pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 
@@ -97,7 +98,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                     task.getInputDirId(), task.getDestDirId())) {
                 if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
-                LOGGER.trace("Performing map");
+                LOGGER.info("Performing map");
                 processor.map();
 
                 Utils.respondWithSuccess(responseObserver);
@@ -114,7 +115,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
                     task.getInputDirId(), task.getDestDirId())) {
                 if (task.getTaskType() != Reduce) throw new RuntimeException("Bad task type");
 
-                LOGGER.trace("Performing reduce");
+                LOGGER.info("Performing reduce");
                 processor.reduce();
 
                 Utils.respondWithSuccess(responseObserver);

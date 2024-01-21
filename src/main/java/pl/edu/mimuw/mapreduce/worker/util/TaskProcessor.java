@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -19,6 +21,7 @@ public abstract class TaskProcessor implements AutoCloseable {
     protected final List<Long> binIds;
     protected final Path tempDir;
     protected final Storage storage;
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskProcessor.class);
 
     public TaskProcessor(Storage storage, List<Long> binIds, String dataDir,
                            String destDirId) throws IOException {
@@ -29,7 +32,7 @@ public abstract class TaskProcessor implements AutoCloseable {
         this.binaries = new ConcurrentHashMap<>();
         this.binIds = binIds;
         for (var binId : binIds)
-            this.binaries.put(binId, storage.getFile(Storage.BINARY_DIR, binId).file());
+            this.binaries.put(binId, storage.getBinary(binId));
     }
 
     public File copyInputFileToTempDir(FileRep fr) throws IOException {
@@ -38,8 +41,7 @@ public abstract class TaskProcessor implements AutoCloseable {
 
     @Override
     public void close() throws IOException {
-        for (var binary : binaries.values())
-            Files.delete(binary.toPath().toAbsolutePath());
+        LOGGER.info("Closing task processor");
         Utils.removeDirRecursively(this.tempDir);
     }
 }

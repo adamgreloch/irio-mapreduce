@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.storage.local;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
@@ -14,9 +16,14 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Stream;
 
+import static java.nio.file.StandardCopyOption.COPY_ATTRIBUTES;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+
 
 /* NOTE: We assume that the argument-directories already exist */
 public class DistrStorage implements Storage {
+    private static final Logger LOGGER = LoggerFactory.getLogger(DistrStorage.class);
+
     private final Path storagePath;
     private Path tmpStorage;
 
@@ -34,7 +41,7 @@ public class DistrStorage implements Storage {
             Files.createDirectories(this.storagePath.resolve(BINARY_DIR));
             Files.createDirectories(this.storagePath.resolve(STATE_DIR));
 
-            Utils.LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
+            LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
 
             this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
         } catch (IOException e) {
@@ -44,6 +51,13 @@ public class DistrStorage implements Storage {
 
     public Path getStoragePath() {
         return storagePath;
+    }
+
+    @Override
+    public File getBinary(long fileId) {
+        var binPath = storagePath.resolve(BINARY_DIR).resolve(String.valueOf(fileId));
+        LOGGER.info("Accessing binary " + fileId + " under " + binPath);
+        return binPath.toFile();
     }
 
     @Override
@@ -60,7 +74,8 @@ public class DistrStorage implements Storage {
             var fileId = path.getFileName().toString();
             var tmpDirPath = tmpStorage.resolve(path.getParent().getFileName());
             Files.createDirectories(tmpDirPath);
-            Path copyPath = Files.copy(path, tmpDirPath.resolve(fileId));
+            Path copyPath = Files.copy(path, tmpDirPath.resolve(fileId), COPY_ATTRIBUTES, REPLACE_EXISTING);
+            LOGGER.info("Downloaded file " + path + " to local " + copyPath);
             return new LocalFileRep(copyPath.toFile(), Long.parseLong(fileId));
         } catch (IOException e) {
             throw new RuntimeException(e);
