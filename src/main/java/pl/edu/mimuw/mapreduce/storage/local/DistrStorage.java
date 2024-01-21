@@ -3,13 +3,14 @@ package pl.edu.mimuw.mapreduce.storage.local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
+import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.proto.common.Split;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -222,6 +223,37 @@ public class DistrStorage implements Storage {
             }
         } catch (Exception e) {
             throw new RuntimeException("Could not reduce duplicates: " + e);
+        }
+    }
+
+    @Override
+    public void saveTMState(TaskManagerImpl TM, String podName) {
+        createDir(storagePath.resolve(STATE_DIR).toString());
+        try {
+            Path path = Files.createFile(storagePath.resolve(STATE_DIR).resolve(podName));
+            FileOutputStream fileOutputStream = new FileOutputStream(path.toFile());
+            ObjectOutputStream objectOutputStream = new ObjectOutputStream(fileOutputStream);
+
+            objectOutputStream.writeObject(TM);
+            objectOutputStream.flush();
+            objectOutputStream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @Override
+    public Optional<TaskManagerImpl> retrieveTMState(String podName) {
+        try {
+            File file = new File(String.valueOf(storagePath.resolve(STATE_DIR).resolve(podName)));
+            FileInputStream fileInputStream = new FileInputStream(file);
+            ObjectInputStream objectInputStream = new ObjectInputStream(fileInputStream);
+
+            TaskManagerImpl tm = (TaskManagerImpl) objectInputStream.readObject();
+            objectInputStream.close();
+            return Optional.of(tm);
+        } catch (IOException | ClassNotFoundException e) {
+            return Optional.empty();
         }
     }
 

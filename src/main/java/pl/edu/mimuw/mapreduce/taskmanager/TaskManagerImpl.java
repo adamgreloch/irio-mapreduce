@@ -26,6 +26,7 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.util.*;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,19 +35,27 @@ import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
+public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable, Serializable {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskManagerImpl.class);
+    private final TaskManagerImpl tmINSTANCE;
     private final Storage storage;
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
     private final ManagedChannel workerChannel;
     private final Integer MAX_ATTEMPT = -1;
     private final Integer WORKER_TIMEOUT = 300; // Time after which task will be rerun in seconds.
+    private final List<Batch> processingBatches;
+    private final Map<Batch, TMStatus> batchTMStatusMap;
+    private final Map<Batch, BatchHandler> batchBatchHandlerMap;
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         LOGGER.info("Worker service URI set to: " + workersUri);
         this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
+        this.processingBatches = new ArrayList<>();
+        this.batchTMStatusMap = new ConcurrentHashMap<>();
+        this.batchBatchHandlerMap = new ConcurrentHashMap<>();
+        this.tmINSTANCE = this;
     }
 
     public static void start() throws IOException, InterruptedException {
@@ -55,15 +64,39 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
-                        ClusterConfig.TASK_MANAGERS_URI)
-                .awaitTermination();
+        Optional<TaskManagerImpl> tmBackup = storage.retrieveTMState(ClusterConfig.POD_NAME);
+        if (tmBackup.isEmpty()) {
+            Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
+                            ClusterConfig.TASK_MANAGERS_URI)
+                    .awaitTermination();
+        } else {
+            TaskManagerImpl tm = tmBackup.get();
+            var server = Utils.start_server(tm, health, ClusterConfig.TASK_MANAGERS_URI);
+
+            for (var batch : tm.processingBatches) {
+                tm.reRunButch(batch);
+            }
+
+            server.awaitTermination();
+        }
+
     }
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
-        pool.execute(new BatchHandler(batch, responseObserver));
+        processingBatches.add(batch);
+        BatchHandler batchHandler = new BatchHandler(batch, responseObserver);
+        batchBatchHandlerMap.put(batch, batchHandler);
+        batchTMStatusMap.put(batch, TMStatus.BEGINNING);
+        pool.execute(batchHandler);
+    }
+
+    private void reRunButch(Batch batch) {
+        BatchHandler batchHandler = batchBatchHandlerMap.get(batch); //idK MOŻE NIE BYĆ USTAWIONE?
+        batchHandler.rerunHalfOfPhase = true;
+        batchHandler.concatDirId = UUID.randomUUID().toString();
+        pool.execute(batchHandler);
     }
 
     @Override
@@ -88,7 +121,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         return PingResponse.getDefaultInstance();
     }
 
-    class BatchHandler implements Runnable {
+    class BatchHandler implements Runnable, Serializable {
         private final Batch batch;
         private final StreamObserver<Response> responseObserver;
         private CountDownLatch phaseDoneLatch;
@@ -96,7 +129,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final AtomicInteger nextTaskId;
         private final Integer reduceTaskCount;
         private final List<String> workersDestDirIds; // List of directories that belong do batch.
-        private final String concatDirId;
+        private String concatDirId;
         // Each Key in this map is a Task.ID
         private final Map<Long, List<ListenableFuture<Response>>> runningMaps;
         private final Map<Long, List<ListenableFuture<Response>>> runningReduces;
@@ -105,6 +138,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         private final Map<Long, DoReduceRequest> basicReduce; // First instance of request for provided Id from which we should mutate our request if we must redo it.
         private final Map<Long, Boolean> completedMaps;
         private final Map<Long, Boolean> completedReduces;
+        private boolean rerunHalfOfPhase;
+        private List<Split> splits;
 
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
@@ -121,6 +156,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             this.basicMap = new ConcurrentHashMap<>();
             this.basicReduce = new ConcurrentHashMap<>();
             this.concatDirId = UUID.randomUUID().toString();
+            this.splits = new ArrayList<>();
+            this.rerunHalfOfPhase = false;
             storage.createDir(concatDirId);
         }
 
@@ -147,97 +184,152 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .build();
         }
 
+        private void saveState(TMStatus status) {
+            batchTMStatusMap.put(batch, status);
+            storage.saveTMState(tmINSTANCE, ClusterConfig.POD_NAME);
+            rerunHalfOfPhase = false;
+        }
+
+        private void sendMap(DoMapRequest doMapRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
+            runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
+        }
+
+        private void sendReduce(DoReduceRequest doReduceRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+            runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
+        }
+
         @Override
         public void run() {
 
             // Mapping phase
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_MAPS)) {
+                splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
+                for (Split split : splits) {
+                    Task task = createMapTask();
 
-            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
-            for (Split split : splits) {
-                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+                    storage.createDir(task.getDestDirId());
 
-                Task task = createMapTask();
-
-                storage.createDir(task.getDestDirId());
-
-                var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
-                basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
-                ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
-                runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
-                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
-                        doMapRequest, 0, runningMaps, completedMaps), pool);
-            }
-            try {
-                rescheduleIfStale(runningMaps, completedMaps, basicMap);
-            } catch (InterruptedException e) {
-                Utils.respondWithThrowable(e, responseObserver);
-                return;
-            }
-
-            // Concatenation phase
-            List<Integer> fileIds = new ArrayList<>();
-
-            assert !workersDestDirIds.isEmpty();
-
-            for (int i = 0; i < reduceTaskCount; i++) {
-                File mergedFile = null;
-                try {
-                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
+                    var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
+                    basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
+                    sendMap(doMapRequest);
                 }
+                saveState(TMStatus.SENT_MAPS);
+            }
 
-                for (var workersDestDirId : workersDestDirIds) {
-                    try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
-                        File file = storage.getFile(workersDestDirId, i).file();
-                        try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
-                            IOUtils.copy(inputStream, outputStream);
-                        } catch (IOException e) {
-                            throw new RuntimeException(e);
-                        }
-                    } catch (IOException e) {
-                        Utils.respondWithThrowable(e, responseObserver);
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_MAPS_IF_STALE)) {
+                if (rerunHalfOfPhase) {
+                    var mapsToRerun = runningMaps.keySet();
+                    runningMaps.clear();
+                    phaseDoneLatch = new CountDownLatch(mapsToRerun.size());
+                    for (var taskId : mapsToRerun) {
+
+                        var doMapRequest = Utils.changeDestDirIdInTask(basicMap.get(taskId));
+                        sendMap(doMapRequest);
                     }
                 }
 
-                storage.putFile(concatDirId, i, mergedFile);
-                fileIds.add(i);
+                try {
+                    rescheduleIfStale(runningMaps, completedMaps, basicMap);
+                } catch (InterruptedException e) {
+                    Utils.respondWithThrowable(e, responseObserver);
+                    return;
+                }
+                saveState(TMStatus.RESCHEDULED_MAPS_IF_STALE);
+            }
+            List<Integer> fileIds = new ArrayList<>();
+
+            // Concatenation phase
+            // If we rerun we must complete this in full, no more staring from middle.
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.FINISHED_CONCATENATION)) {
+                assert !workersDestDirIds.isEmpty();
+
+                for (int i = 0; i < reduceTaskCount; i++) {
+                    File mergedFile = null;
+                    try {
+                        mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+
+                    for (var workersDestDirId : workersDestDirIds) {
+                        try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
+                            File file = storage.getFile(workersDestDirId, i).file();
+                            try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
+                                IOUtils.copy(inputStream, outputStream);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        } catch (IOException e) {
+                            Utils.respondWithThrowable(e, responseObserver);
+                        }
+                    }
+
+                    storage.putFile(concatDirId, i, mergedFile);
+                    fileIds.add(i);
+                }
+                saveState(TMStatus.FINISHED_CONCATENATION);
             }
 
             // Reduce phase
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_REDUCES)) {
+                phaseDoneLatch = new CountDownLatch(fileIds.size());
 
-            phaseDoneLatch = new CountDownLatch(fileIds.size());
+                assert fileIds.size() == batch.getRNum();
 
-            assert fileIds.size() == batch.getRNum();
+                for (var fileId : fileIds) {
+                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
-            for (var fileId : fileIds) {
-                var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+                    Task task = createReduceTask();
 
-                Task task = createReduceTask();
-
-                var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
-                basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
-                ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
-                Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
-                        doReduceRequest, 0, runningReduces, completedReduces), pool);
+                    var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
+                    basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
+                    ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+                    runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>()).add(listenableFuture);
+                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver, phaseDoneLatch,
+                            doReduceRequest, 0, runningReduces, completedReduces), pool);
+                }
+                saveState(TMStatus.SENT_REDUCES);
             }
 
-            try {
-                rescheduleIfStale(runningReduces, completedReduces, basicReduce);
-            } catch (InterruptedException e) {
-                Utils.respondWithThrowable(e, responseObserver);
-                return;
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.RESCHEDULED_REDUCES_IF_STALE)) {
+                if (rerunHalfOfPhase) {
+                    var reducesToRerun = runningReduces.keySet();
+                    runningReduces.clear();
+                    phaseDoneLatch = new CountDownLatch(reducesToRerun.size());
+                    for (var taskId : reducesToRerun) {
+
+                        var doReduceRequest = basicReduce.get(taskId);
+                        sendReduce(doReduceRequest);
+                    }
+                }
+
+                try {
+                    rescheduleIfStale(runningReduces, completedReduces, basicReduce);
+                } catch (InterruptedException e) {
+                    Utils.respondWithThrowable(e, responseObserver);
+                    return;
+                }
+                saveState(TMStatus.RESCHEDULED_REDUCES_IF_STALE);
             }
 
-            storage.removeReduceDuplicates(batch.getFinalDestDirId());
+            if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.FINISHED)) {
+                storage.removeReduceDuplicates(batch.getFinalDestDirId());
+                processingBatches.remove(batch);
 
-            Utils.respondWithSuccess(responseObserver);
+                Utils.respondWithSuccess(responseObserver);
 
-            // Cleanup phase
+                // Cleanup phase
 
-            for (var dir : workersDestDirIds) {
-                Utils.removeDirRecursively(Path.of(dir));
+                for (var dir : workersDestDirIds) {
+                    Utils.removeDirRecursively(Path.of(dir));
+                }
+                saveState(TMStatus.FINISHED);
             }
         }
 
