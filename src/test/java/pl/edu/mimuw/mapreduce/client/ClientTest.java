@@ -99,7 +99,18 @@ public class ClientTest {
         var dataDirPath = storage.getDirPath("0");
 
         writeInputFileWithId(dataDirPath, "0", "a b c");
-        writeInputFileWithId(dataDirPath, "1", "a b c");
+        writeInputFileWithId(dataDirPath, "1", "d bi ooooooo c");
+        writeInputFileWithId(dataDirPath, "2", "d b beee c");
+        writeInputFileWithId(dataDirPath, "3", "d b beee beee  aaaa c");
+        writeInputFileWithId(dataDirPath, "4", "d affffffffff  ffc");
+        writeInputFileWithId(dataDirPath, "5", "a  j c j c j c j c j cj c");
+        writeInputFileWithId(dataDirPath, "6", "a beee c");
+        writeInputFileWithId(dataDirPath, "7", "a bbeee beee beee beee  c");
+        writeInputFileWithId(dataDirPath, "8", "a bbeee bee  e beee beee  c");
+        writeInputFileWithId(dataDirPath, "9", "a bbzzzz zzzzzzzzz beee  c");
+        writeInputFileWithId(dataDirPath, "10", "a bzzzz zzzzzzzzze beee  c");
+        writeInputFileWithId(dataDirPath, "11", "a bzzzz zzz zzzzzze beee  c");
+        writeInputFileWithId(dataDirPath, "12", "a bzzzzzzzz zzzzze beee  c");
 
         storage.createDir("1");
 

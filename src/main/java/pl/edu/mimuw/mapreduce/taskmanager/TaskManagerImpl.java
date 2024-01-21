@@ -179,7 +179,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             assert !workersDestDirIds.isEmpty();
 
-            for (int i = 0; i < reduceTaskCount; i++) {
+            for (int i = 0; i < batch.getRNum(); i++) {
                 File mergedFile = null;
                 try {
                     mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
