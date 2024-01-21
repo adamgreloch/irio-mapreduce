@@ -281,7 +281,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             if (!batchTMStatusMap.get(batch).furtherThan(TMStatus.SENT_REDUCES)) {
                 phaseDoneLatch = new CountDownLatch(fileIds.size());
 
-            assert fileIds.size() == batch.getRNum();
+                assert fileIds.size() == batch.getRNum();
 
                 for (var fileId : fileIds) {
                     var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
@@ -323,13 +323,13 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 storage.removeReduceDuplicates(batch.getFinalDestDirId());
                 processingBatches.remove(batch);
 
-            Utils.respondWithSuccess(responseObserver);
+                Utils.respondWithSuccess(responseObserver);
 
-            // Cleanup phase
+                // Cleanup phase
 
-            for (var dir : workersDestDirIds) {
-                Utils.removeDirRecursively(Path.of(dir));
-            }
+                for (var dir : workersDestDirIds) {
+                    Utils.removeDirRecursively(Path.of(dir));
+                }
                 saveState(TMStatus.FINISHED);
             }
         }
