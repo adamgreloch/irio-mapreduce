@@ -292,11 +292,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         for (var future : futures) {
                             future.cancel(true);
                         }
-                        if (request instanceof DoReduceRequest doReduceRequest)
-                            workersDestDirIds.add(doReduceRequest.getTask().getDestDirId());
-                        else if (request instanceof DoMapRequest doMapRequest)
+                        if (request instanceof DoMapRequest doMapRequest) {
+                            var split = doMapRequest.getSplit();
+                            LOGGER.info("Map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "] completed");
                             workersDestDirIds.add(doMapRequest.getTask().getDestDirId());
-                        else
+                        } else if (request instanceof DoReduceRequest doReduceRequest) {
+                            LOGGER.info("Reduce task for file " + doReduceRequest.getFileId() + " completed");
+                            workersDestDirIds.add(doReduceRequest.getTask().getDestDirId());
+                        } else
                             throw new AssertionError("Object is neither an instance of DoMapRequest or " +
                                     "DoReduceRequest");
                         operationsDoneLatch.countDown();
@@ -306,13 +309,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-                    if (attempt >= MAX_ATTEMPT) {
-                        if (t.getClass() == CancellationException.class) {
-                            return;
-                        }
-                        Utils.respondWithThrowable(t, responseObserver); //TODO jak cancelujemy future to się to
-                        // wysyłą i to jest problem
-                    } else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                    if (t.getClass() == CancellationException.class)
+                        return;
+                    if (attempt >= MAX_ATTEMPT)
+                        Utils.respondWithThrowable(t, responseObserver);
+                    else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                 }
 
                 private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch,
@@ -322,12 +323,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                     if (request instanceof DoMapRequest doMapRequest) {
                         listenableFuture = workerFutureStub.doMap(doMapRequest);
+                        var split = doMapRequest.getSplit();
+                        LOGGER.info("Rescheduling map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "]. Attempt " + attempt);
                     } else if (request instanceof DoReduceRequest doReduceRequest) {
+                        LOGGER.info("Rescheduling reduce task for file " + doReduceRequest.getFileId() + ". Attempt " + attempt);
                         listenableFuture = workerFutureStub.doReduce(doReduceRequest);
                     } else
                         throw new AssertionError("Object is neither an instance of DoMapRequest or " +
                                 "DoReduceRequest");
-                    LOGGER.info("TM - rerunning request. Attempt nr: " + attempt + "| request \n" + request);
                     Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
                             operationsDoneLatch, request, attempt + 1, runningRequests, completedRequests), pool);
                 }

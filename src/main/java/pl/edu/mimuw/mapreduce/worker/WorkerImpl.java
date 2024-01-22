@@ -31,7 +31,7 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     public static final Logger LOGGER = LoggerFactory.getLogger(WorkerImpl.class);
     private final Storage storage;
     // TODO when using fixedThreadPool there is a deadlock - investigate
-    private final ExecutorService pool = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors() + 1);
+    private final ExecutorService pool = Executors.newCachedThreadPool();
     private final HealthStatusManager health;
 
     public static void start() throws IOException, InterruptedException {
