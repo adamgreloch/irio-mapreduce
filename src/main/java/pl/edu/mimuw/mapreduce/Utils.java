@@ -120,9 +120,8 @@ public class Utils {
         return ManagedChannelBuilder.forTarget(target)
                 .defaultLoadBalancingPolicy("round_robin")
                 .defaultServiceConfig(generateHealthConfig(""))
-                // TODO probably worth enabling
-                // .enableRetry()
-                // .keepAliveTime(10, TimeUnit.SECONDS)
+                .enableRetry()
+                .keepAliveTime(15*60, TimeUnit.SECONDS)
                 .usePlaintext();
     }
 
@@ -153,9 +152,12 @@ public class Utils {
         responseObserver.onCompleted();
     }
 
-    public static void respondWithSuccess(StreamObserver<Response> responseObserver) {
+    public static Response success() {
+        return Response.newBuilder().setStatusCode(StatusCode.Ok).build();
+    }
+
+    public static void respondWithResult(Response response, StreamObserver<Response> responseObserver) {
         Utils.LOGGER.info("RPC request succeeded");
-        var response = Response.newBuilder().setStatusCode(StatusCode.Ok).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }

@@ -19,22 +19,23 @@ public class MapProcessor extends TaskProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapProcessor.class);
 
     private final Split split;
-    private static final ExecutorService pool = Executors.newWorkStealingPool(8);
+    private final ExecutorService pool;
     private final Semaphore mutex = new Semaphore(1);
     private List<Future<Void>> futures = new ArrayList<>();
     private final int rNum;
 
-    public MapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
+    public MapProcessor(Storage storage, ExecutorService pool, Split split, List<Long> binIds, String dataDir,
                         String destDirId, int rNum) throws IOException {
         super(storage, binIds, dataDir, destDirId);
         this.split = split;
         this.rNum = rNum;
+        this.pool = pool;
     }
 
     public void map() throws ExecutionException, InterruptedException {
         for (Iterator<Path> it = storage.getSplitIterator(String.valueOf(dataDir), split); it.hasNext(); ) {
             Path path = it.next();
-            futures.add(pool.submit(new FileProcessor(storage.getFile(path), binaries.size())));
+            futures.add(pool.submit(new FileProcessor(storage.getFile(path), binIds.size())));
         }
         for (var future : futures)
             future.get();
@@ -63,7 +64,7 @@ public class MapProcessor extends TaskProcessor {
                 String outputPath;
                 if (i == binaryCount - 1) {
                     // Partition phase. The output path is just a destination directory
-                    LOGGER.info("Executing combine binary " + binary + " on file " + inputPath);
+                    LOGGER.info("Executing partition binary " + binary + " on file " + inputPath);
                     outputPath = storage.getDirPath(String.valueOf(destDirId)).toAbsolutePath().toString();
                     pb.command(binary,
                             "-R", String.valueOf(rNum),
@@ -87,7 +88,7 @@ public class MapProcessor extends TaskProcessor {
             }
 
             LOGGER.info("Map/Partition task finished for input file " + dataDir + "/" + fr.id());
-//            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (1 - binaryCount % 2)]);
+
             return null;
         }
     }

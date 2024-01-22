@@ -45,7 +45,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
         return new FutureCallback<Response>() {
             @Override
             public void onSuccess(Response result) {
-                Utils.respondWithSuccess(responseObserver);
+                Utils.respondWithResult(result, responseObserver);
             }
 
             @Override

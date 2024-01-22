@@ -37,16 +37,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase implements HealthCheckable {
     public static final Logger LOGGER = LoggerFactory.getLogger(TaskManagerImpl.class);
     private final Storage storage;
-    private final ExecutorService pool = Executors.newCachedThreadPool();
-    private final ScheduledExecutorService scheduledPool = Executors.newScheduledThreadPool(10);
+    private final ExecutorService pool = Executors.newWorkStealingPool(Runtime.getRuntime().availableProcessors() + 1);
     private final ManagedChannel workerChannel;
     private final Integer MAX_ATTEMPT = 3;
-    private final Integer WORKER_TIMEOUT = 30; // Time after which task will be rerun in seconds.
+    private final Integer WORKER_TIMEOUT = 600; // Time after which task will be rerun in seconds.
 
     public TaskManagerImpl(Storage storage, HealthStatusManager health, String workersUri) {
         this.storage = storage;
         LOGGER.info("Worker service URI set to: " + workersUri);
-        this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).executor(pool).build();
+        this.workerChannel = Utils.createCustomClientChannelBuilder(workersUri).build();
     }
 
     public static void start() throws IOException, InterruptedException {
@@ -63,6 +62,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("Starting to process a batch: " + batch);
         pool.execute(new BatchHandler(batch, responseObserver));
     }
 
@@ -150,9 +150,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         public void run() {
             try {
 
-                // Mapping phase
-
+                LOGGER.info("Initiating mapping phase");
                 List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
+
                 for (Split split : splits) {
                     var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -162,6 +162,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
                     var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
                     basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
+                    LOGGER.info("Requesting doMap on split [" + split.getBeg() + ", " + split.getEnd() + "]");
                     ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
                     runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
                                .add(listenableFuture);
@@ -169,9 +170,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                             phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
                 }
 
+                LOGGER.info("Waiting for map results");
                 rescheduleIfStale(runningMaps, completedMaps, basicMap);
 
-                // Concatenation phase
+                LOGGER.info("Initiating concatenation phase");
                 List<Integer> fileIds = new ArrayList<>();
 
                 assert !workersDestDirIds.isEmpty();
@@ -195,8 +197,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     fileIds.add(i);
                 }
 
-                // Reduce phase
-                LOGGER.info("TM - got to reduce phase.");
+                LOGGER.info("Initiating reduce phase");
                 phaseDoneLatch = new CountDownLatch(fileIds.size());
 
                 assert fileIds.size() == batch.getRNum();
@@ -215,12 +216,14 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                             phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
                 }
 
+                LOGGER.info("Waiting for reduce results");
                 rescheduleIfStale(runningReduces, completedReduces, basicReduce);
 
+                LOGGER.info("Moving reduce results to destination directory");
                 storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
 
-                Utils.respondWithSuccess(responseObserver);
-
+                LOGGER.info("Batch done!");
+                Utils.respondWithResult(Utils.success(), responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             } finally {
@@ -238,8 +241,9 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             while (!latchStatus) {
                 latchStatus = phaseDoneLatch.await(WORKER_TIMEOUT, TimeUnit.SECONDS);
                 if (!latchStatus) {
+                    LOGGER.info("Time's up");
                     for (var taskId : runningRequests.keySet()) { // resend still running reduces
-                        LOGGER.info("TM - taskID: " + taskId + " is stale resending.");
+                        LOGGER.info("Task " + taskId + " is stale - rescheduling");
 
                         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
@@ -274,12 +278,11 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 @Override
                 public void onSuccess(Response result) {
                     if (result.getStatusCode() == StatusCode.Err) {
-                        if (attempt >= MAX_ATTEMPT) {
+                        if (attempt >= MAX_ATTEMPT)
                             Utils.respondWithThrowable(new RuntimeException("Number of attempts for task was " +
                                     "exceeded"), responseObserver);
-                            return;
-                        }
-                        reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                        else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                        return;
                     }
 
                     Long taskId = getTaskIdFromRequestObject(request);

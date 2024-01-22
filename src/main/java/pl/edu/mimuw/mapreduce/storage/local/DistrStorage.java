@@ -3,6 +3,7 @@ package pl.edu.mimuw.mapreduce.storage.local;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.Utils;
+import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.SplitBuilder;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -43,7 +44,8 @@ public class DistrStorage implements Storage {
 
             LOGGER.info("Hooked up DistrStorage to path successfully " + storagePathString);
 
-            this.tmpStorage = Files.createTempDirectory("storage_tmp").toAbsolutePath();
+            this.tmpStorage = ClusterConfig.TEMP_DIR.resolve("storage");
+            Files.createDirectories(tmpStorage);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -219,7 +221,7 @@ public class DistrStorage implements Storage {
                     Files.delete(path);
                 } else {
                     fileNamesPrefixes.add(fileNamePrefix);
-                    Files.move(path, destDirPath.resolve(fileNamePrefix));
+                    Files.move(path, destDirPath.resolve(fileNamePrefix), REPLACE_EXISTING);
                 }
             }
         } catch (Exception e) {

@@ -18,9 +18,10 @@ public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImpl
     @Override
     public void executePayload(Payload request, StreamObserver<Response> responseObserver) {
         this.payload = request;
-        Utils.respondWithSuccess(responseObserver);
+        Utils.respondWithResult(Utils.success(), responseObserver);
     }
-    public Payload getPayload(){
+
+    public Payload getPayload() {
         return payload;
     }
 
@@ -30,7 +31,7 @@ public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImpl
         if (result != null) {
             return result;
         }
-        synchronized(ServerBreakerImpl.class) {
+        synchronized (ServerBreakerImpl.class) {
             if (instance == null) {
                 instance = new ServerBreakerImpl();
             }
