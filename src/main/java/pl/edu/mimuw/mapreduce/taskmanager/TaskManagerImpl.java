@@ -168,7 +168,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             Task task = createReduceTask();
 
             var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
-            return basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
+            basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
+            return doReduceRequest;
         }
 
         private void sendReduce(DoReduceRequest doReduceRequest) {
