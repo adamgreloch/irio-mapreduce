@@ -55,14 +55,15 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         HealthStatusManager health = new HealthStatusManager();
 
         Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
-                     ClusterConfig.TASK_MANAGERS_URI)
-             .awaitTermination();
+                        ClusterConfig.TASK_MANAGERS_URI)
+                .awaitTermination();
     }
 
     @Override
     public void doBatch(Batch batch, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
         LOGGER.info("Starting to process a batch: " + batch);
+
         pool.execute(new BatchHandler(batch, responseObserver));
     }
 
@@ -109,6 +110,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         // request for provided Id from which we should mutate our request if we must redo it.
         private final Map<Long, Boolean> completedMaps = new ConcurrentHashMap<>();
         private final Map<Long, Boolean> completedReduces = new ConcurrentHashMap<>();
+        private final List<Integer> fileIds = new ArrayList<>();
 
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
@@ -123,150 +125,198 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             storage.createDir(reduceDestDirId);
         }
 
-        private Task createMapTask() {
-            return Task.newBuilder()
-                       .setTaskId(nextTaskId.getAndIncrement())
-                       .setTaskType(Task.TaskType.Map)
-                       .setInputDirId(batch.getInputId())
-                       .setDestDirId(UUID.randomUUID().toString())
-                       .setRNum(batch.getRNum())
-                       .addAllTaskBinIds(batch.getMapBinIdsList())
-                       .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
-                       .build();
-        }
-
-        private Task createReduceTask() {
-            return Task.newBuilder()
-                       .setTaskId(nextTaskId.getAndIncrement())
-                       .setTaskType(Task.TaskType.Reduce)
-                       .setInputDirId(concatDirId)
-                       .setRNum(batch.getRNum())
-                       .setDestDirId(reduceDestDirId)
-                       .addAllTaskBinIds(batch.getReduceBinIdsList())
-                       .build();
-        }
-
         @Override
         public void run() {
             try {
-
-                LOGGER.info("Initiating mapping phase");
-                List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
-
-                for (Split split : splits) {
-                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
-
-                    Task task = createMapTask();
-
-                    storage.createDir(task.getDestDirId());
-
-                    var doMapRequest = DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
-                    basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
-                    LOGGER.info("Requesting doMap on split [" + split.getBeg() + ", " + split.getEnd() + "]");
-                    ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
-                    runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                               .add(listenableFuture);
-                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                            phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
-                }
-
-                LOGGER.info("Waiting for map results");
-                rescheduleIfStale(runningMaps, completedMaps, basicMap);
-
-                LOGGER.info("Initiating concatenation phase");
-                List<Integer> fileIds = new ArrayList<>();
-
-                assert !workersDestDirIds.isEmpty();
-
-                for (int i = 0; i < batch.getRNum(); i++) {
-                    File mergedFile;
-                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
-
-                    for (var workersDestDirId : workersDestDirIds) {
-                        try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
-                            File file = storage.getFile(workersDestDirId, i).file();
-                            try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
-                                IOUtils.copy(inputStream, outputStream);
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-                    }
-
-                    storage.putFile(concatDirId, i, mergedFile);
-                    fileIds.add(i);
-                }
-
-                LOGGER.info("Initiating reduce phase");
-                phaseDoneLatch = new CountDownLatch(fileIds.size());
-
-                assert fileIds.size() == batch.getRNum();
-
-                for (var fileId : fileIds) {
-                    var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
-
-                    Task task = createReduceTask();
-
-                    var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
-                    basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
-                    ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                    runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                                  .add(listenableFuture);
-                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                            phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
-                }
-
-                LOGGER.info("Waiting for reduce results");
-                rescheduleIfStale(runningReduces, completedReduces, basicReduce);
-
-                LOGGER.info("Moving reduce results to destination directory");
-                storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
+                mapPhase();
+                concatenationPhase();
+                reducePhase();
 
                 LOGGER.info("Batch done!");
                 Utils.respondWithResult(Utils.success(), responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             } finally {
-                // Cleanup phase
-                for (var dir : workersDestDirIds)
-                    Utils.removeDirRecursively(Path.of(dir));
-                Utils.removeDirRecursively(storage.getDirPath(concatDirId));
-                Utils.removeDirRecursively(storage.getDirPath(reduceDestDirId));
+                cleanup();
             }
         }
 
-        private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests, Map<Long,
-                Boolean> completedRequests, Map<Long, T> basicRequest) throws InterruptedException {
+        private Task createMapTask() {
+            return Task.newBuilder()
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Map)
+                    .setInputDirId(batch.getInputId())
+                    .setDestDirId(UUID.randomUUID().toString())
+                    .setRNum(batch.getRNum())
+                    .addAllTaskBinIds(batch.getMapBinIdsList())
+                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                    .build();
+        }
+
+        private Task createReduceTask() {
+            return Task.newBuilder()
+                    .setTaskId(nextTaskId.getAndIncrement())
+                    .setTaskType(Task.TaskType.Reduce)
+                    .setInputDirId(concatDirId)
+                    .setRNum(batch.getRNum())
+                    .setDestDirId(reduceDestDirId)
+                    .addAllTaskBinIds(batch.getReduceBinIdsList())
+                    .build();
+        }
+
+        private DoReduceRequest prepareDoReduceRequest(Integer fileId) {
+            Task task = createReduceTask();
+
+            var doReduceRequest = DoReduceRequest.newBuilder().setTask(task).setFileId(fileId).build();
+            basicReduce.put(doReduceRequest.getTask().getTaskId(), doReduceRequest);
+            return doReduceRequest;
+        }
+
+        private void sendReduce(DoReduceRequest doReduceRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+            runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>())
+                    .add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
+                    phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
+        }
+
+        private DoMapRequest prepareDoMapRequest(Split split) {
+            Task task = createMapTask();
+            storage.createDir(task.getDestDirId());
+            return DoMapRequest.newBuilder().setTask(task).setSplit(split).build();
+        }
+
+        private void sendMap(DoMapRequest doMapRequest) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+
+            ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
+            runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
+                    .add(listenableFuture);
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
+                    phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
+        }
+
+        private void mapPhase() throws InterruptedException {
+            LOGGER.info("Initiating mapping phase");
+            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
+
+            for (Split split : splits) {
+                DoMapRequest doMapRequest = prepareDoMapRequest(split);
+
+                basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
+                LOGGER.info("Requesting doMap on split [" + split.getBeg() + ", " + split.getEnd() + "]");
+
+                sendMap(doMapRequest);
+            }
+
+            LOGGER.info("Waiting for map results");
+            rescheduleIfStale(runningMaps, completedMaps, basicMap);
+        }
+
+
+        private void concatenationPhase() throws IOException {
+            LOGGER.info("Initiating concatenation phase");
+
+            assert !workersDestDirIds.isEmpty();
+
+            for (int i = 0; i < batch.getRNum(); i++) {
+                File mergedFile;
+                mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
+
+                mergeFilesWithIndexToDest(i, mergedFile);
+
+                storage.putFile(concatDirId, i, mergedFile);
+                fileIds.add(i);
+            }
+        }
+
+        private void mergeFilesWithIndexToDest(int index, File dest) {
+            for (var workersDestDirId : workersDestDirIds) {
+                try (var outputStream = new BufferedOutputStream(new FileOutputStream(dest, true))) {
+                    File file = storage.getFile(workersDestDirId, index).file();
+                    var inputStream = new BufferedInputStream(new FileInputStream(file));
+                    IOUtils.copy(inputStream, outputStream);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        private void cleanup() {
+            LOGGER.info("Initiating cleanup");
+
+            for (var dir : workersDestDirIds)
+                Utils.removeDirRecursively(Path.of(dir));
+            Utils.removeDirRecursively(storage.getDirPath(concatDirId));
+            Utils.removeDirRecursively(storage.getDirPath(reduceDestDirId));
+        }
+
+        private void reducePhase() throws InterruptedException {
+            LOGGER.info("Initiating reduce phase");
+            phaseDoneLatch = new CountDownLatch(fileIds.size());
+
+            assert fileIds.size() == batch.getRNum();
+
+            for (var fileId : fileIds) {
+                DoReduceRequest doReduceRequest = prepareDoReduceRequest(fileId);
+                sendReduce(doReduceRequest);
+            }
+
+            LOGGER.info("Waiting for reduce results");
+            rescheduleIfStale(runningReduces, completedReduces, basicReduce);
+
+            LOGGER.info("Moving reduce results to destination directory");
+            storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
+        }
+
+        private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests,
+                                           Map<Long, Boolean> completedRequests,
+                                           Map<Long, T> basicRequest) throws InterruptedException {
             var latchStatus = false;
             while (!latchStatus) {
                 latchStatus = phaseDoneLatch.await(WORKER_TIMEOUT, TimeUnit.SECONDS);
-                if (!latchStatus) {
-                    LOGGER.info("Time's up");
-                    for (var taskId : runningRequests.keySet()) { // resend still running reduces
-                        LOGGER.info("Task " + taskId + " is stale - rescheduling");
+                if (latchStatus) {
+                    // Got out of latch because all processes finished.
+                    continue;
+                }
 
-                        var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+                LOGGER.info("Time's up");
+                for (var taskId : runningRequests.keySet()) { // resend still running tasks
+                    LOGGER.info("Task " + taskId + " is stale - rescheduling");
 
-                        ListenableFuture<Response> listenableFuture;
-                        T request = basicRequest.get(taskId);
-                        if (request instanceof DoMapRequest doMapRequest) {
-                            listenableFuture = workerFutureStub.doMap(Utils.changeDestDirIdInTask(doMapRequest));
-                            runningRequests.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                                           .add(listenableFuture);
-                        } else if (request instanceof DoReduceRequest doReduceRequest) {
-                            listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                            runningRequests.computeIfAbsent(doReduceRequest.getTask()
-                                                                           .getTaskId(), r -> new ArrayList<>())
-                                           .add(listenableFuture);
-                        } else {
-                            throw new AssertionError("Object is neither an instance of DoMapRequest or " +
-                                    "DoReduceRequest");
-                        }
-                        Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                                phaseDoneLatch, request, 0, runningRequests, completedRequests), pool);
-                    }
+                    resendRequest(runningRequests, completedRequests, basicRequest, taskId);
                 }
             }
+        }
+
+        private <T> void resendRequest(Map<Long, List<ListenableFuture<Response>>> runningRequests,
+                                   Map<Long, Boolean> completedRequests,
+                                   Map<Long, T> basicRequest,
+                                   Long taskId) {
+            var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
+
+            ListenableFuture<Response> listenableFuture;
+            T request = basicRequest.get(taskId);
+
+            if (request instanceof DoMapRequest doMapRequest) {
+                listenableFuture = workerFutureStub.doMap(Utils.changeDestDirIdInTask(doMapRequest));
+                runningRequests.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
+                        .add(listenableFuture);
+            } else if (request instanceof DoReduceRequest doReduceRequest) {
+                listenableFuture = workerFutureStub.doReduce(doReduceRequest);
+                runningRequests.computeIfAbsent(doReduceRequest.getTask()
+                                .getTaskId(), r -> new ArrayList<>())
+                        .add(listenableFuture);
+            } else {
+                throw new AssertionError("Object is neither an instance of DoMapRequest or " +
+                        "DoReduceRequest");
+            }
+
+            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
+                    phaseDoneLatch, request, 0, runningRequests, completedRequests), pool);
+
         }
 
         private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
@@ -299,9 +349,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         } else if (request instanceof DoReduceRequest doReduceRequest) {
                             LOGGER.info("Reduce task for file " + doReduceRequest.getFileId() + " completed");
                             workersDestDirIds.add(doReduceRequest.getTask().getDestDirId());
-                        } else
+                        } else{
                             throw new AssertionError("Object is neither an instance of DoMapRequest or " +
                                     "DoReduceRequest");
+                        }
                         operationsDoneLatch.countDown();
                     } // else: some other worker's response has already been sent for that request, ignore
                 }
@@ -309,11 +360,15 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-                    if (t.getClass() == CancellationException.class)
+                    if (t.getClass() == CancellationException.class){
                         return;
-                    if (attempt >= MAX_ATTEMPT)
+                    }
+
+                    if (attempt >= MAX_ATTEMPT){
                         Utils.respondWithThrowable(t, responseObserver);
-                    else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                    }else{
+                        reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
+                    }
                 }
 
                 private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch,
