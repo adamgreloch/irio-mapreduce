@@ -110,6 +110,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         // request for provided Id from which we should mutate our request if we must redo it.
         private final Map<Long, Boolean> completedMaps = new ConcurrentHashMap<>();
         private final Map<Long, Boolean> completedReduces = new ConcurrentHashMap<>();
+        private final List<Integer> fileIds = new ArrayList<>();
 
         BatchHandler(Batch batch, StreamObserver<Response> responseObserver) {
             this.batch = batch;
@@ -127,72 +128,16 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         @Override
         public void run() {
             try {
-
-                LOGGER.info("Initiating mapping phase");
-                List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
-
-                for (Split split : splits) {
-                    DoMapRequest doMapRequest = prepareDoMapRequest(split);
-
-                    basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
-                    LOGGER.info("Requesting doMap on split [" + split.getBeg() + ", " + split.getEnd() + "]");
-
-                    sendMap(doMapRequest);
-                }
-
-                LOGGER.info("Waiting for map results");
-                rescheduleIfStale(runningMaps, completedMaps, basicMap);
-
-                LOGGER.info("Initiating concatenation phase");
-                List<Integer> fileIds = new ArrayList<>();
-
-                assert !workersDestDirIds.isEmpty();
-
-                for (int i = 0; i < batch.getRNum(); i++) {
-                    File mergedFile;
-                    mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
-
-                    for (var workersDestDirId : workersDestDirIds) {
-                        try (var outputStream = new BufferedOutputStream(new FileOutputStream(mergedFile, true))) {
-                            File file = storage.getFile(workersDestDirId, i).file();
-                            try (var inputStream = new BufferedInputStream(new FileInputStream(file))) {
-                                IOUtils.copy(inputStream, outputStream);
-                            } catch (IOException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
-                    }
-
-                    storage.putFile(concatDirId, i, mergedFile);
-                    fileIds.add(i);
-                }
-
-                LOGGER.info("Initiating reduce phase");
-                phaseDoneLatch = new CountDownLatch(fileIds.size());
-
-                assert fileIds.size() == batch.getRNum();
-
-                for (var fileId : fileIds) {
-                    DoReduceRequest doReduceRequest = prepareDoReduceRequest(fileId);
-                    sendReduce(doReduceRequest);
-                }
-
-                LOGGER.info("Waiting for reduce results");
-                rescheduleIfStale(runningReduces, completedReduces, basicReduce);
-
-                LOGGER.info("Moving reduce results to destination directory");
-                storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
+                mapPhase();
+                concatenationPhase();
+                reducePhase();
 
                 LOGGER.info("Batch done!");
                 Utils.respondWithResult(Utils.success(), responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             } finally {
-                // Cleanup phase
-                for (var dir : workersDestDirIds)
-                    Utils.removeDirRecursively(Path.of(dir));
-                Utils.removeDirRecursively(storage.getDirPath(concatDirId));
-                Utils.removeDirRecursively(storage.getDirPath(reduceDestDirId));
+                cleanup();
             }
         }
 
@@ -250,6 +195,79 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                     .add(listenableFuture);
             Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
                     phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
+        }
+
+        private void mapPhase() throws InterruptedException {
+            LOGGER.info("Initiating mapping phase");
+            List<Split> splits = storage.getSplitsForDir(batch.getInputId(), splitCount);
+
+            for (Split split : splits) {
+                DoMapRequest doMapRequest = prepareDoMapRequest(split);
+
+                basicMap.put(doMapRequest.getTask().getTaskId(), doMapRequest);
+                LOGGER.info("Requesting doMap on split [" + split.getBeg() + ", " + split.getEnd() + "]");
+
+                sendMap(doMapRequest);
+            }
+
+            LOGGER.info("Waiting for map results");
+            rescheduleIfStale(runningMaps, completedMaps, basicMap);
+        }
+
+
+        private void concatenationPhase() throws IOException {
+            LOGGER.info("Initiating concatenation phase");
+
+            assert !workersDestDirIds.isEmpty();
+
+            for (int i = 0; i < batch.getRNum(); i++) {
+                File mergedFile;
+                mergedFile = Files.createFile(storage.getDirPath(concatDirId).resolve(String.valueOf(i))).toFile();
+
+                mergeFilesWithIndexToDest(i, mergedFile);
+
+                storage.putFile(concatDirId, i, mergedFile);
+                fileIds.add(i);
+            }
+        }
+
+        private void mergeFilesWithIndexToDest(int index, File dest) {
+            for (var workersDestDirId : workersDestDirIds) {
+                try (var outputStream = new BufferedOutputStream(new FileOutputStream(dest, true))) {
+                    File file = storage.getFile(workersDestDirId, index).file();
+                    var inputStream = new BufferedInputStream(new FileInputStream(file));
+                    IOUtils.copy(inputStream, outputStream);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+
+        private void cleanup() {
+            LOGGER.info("Initiating cleanup");
+
+            for (var dir : workersDestDirIds)
+                Utils.removeDirRecursively(Path.of(dir));
+            Utils.removeDirRecursively(storage.getDirPath(concatDirId));
+            Utils.removeDirRecursively(storage.getDirPath(reduceDestDirId));
+        }
+
+        private void reducePhase() throws InterruptedException {
+            LOGGER.info("Initiating reduce phase");
+            phaseDoneLatch = new CountDownLatch(fileIds.size());
+
+            assert fileIds.size() == batch.getRNum();
+
+            for (var fileId : fileIds) {
+                DoReduceRequest doReduceRequest = prepareDoReduceRequest(fileId);
+                sendReduce(doReduceRequest);
+            }
+
+            LOGGER.info("Waiting for reduce results");
+            rescheduleIfStale(runningReduces, completedReduces, basicReduce);
+
+            LOGGER.info("Moving reduce results to destination directory");
+            storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
         }
 
         private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests, Map<Long,
