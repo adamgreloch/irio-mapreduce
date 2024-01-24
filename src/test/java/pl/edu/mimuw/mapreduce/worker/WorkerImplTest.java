@@ -7,6 +7,7 @@ import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.storage.Storage;
@@ -37,6 +38,7 @@ public class WorkerImplTest {
     public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @BeforeAll
+    @DisplayName("Create temp dir and start worker server")
     public static void createTempDir() throws Exception {
         tempDirPath = Files.createTempDirectory("worker_test");
         storage = new DistrStorage(tempDirPath.toAbsolutePath().toString());
@@ -75,6 +77,7 @@ public class WorkerImplTest {
     }
 
     @Test
+    @DisplayName("WorkerImpl correctly does a task")
     public void workerImpl_correctlyDoesATask() throws Exception {
         loadBinaryFromResource("map", 0);
         loadBinaryFromResource("partition", 1);
@@ -142,6 +145,7 @@ public class WorkerImplTest {
     }
 
     @AfterAll
+    @DisplayName("Delete temp dir and terminate worker server")
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();

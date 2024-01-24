@@ -62,6 +62,7 @@ class DistrStorageTest {
     private static DistrStorage storage;
 
     @BeforeAll
+    @DisplayName("Create temp dir and create storage instance")
     static void setupStorage() throws IOException {
         tmpDirPath = Files.createTempDirectory("distr_storage_test")
                               .toAbsolutePath();
@@ -70,6 +71,7 @@ class DistrStorageTest {
     }
 
     @AfterAll
+    @DisplayName("Remove temp dir")
     static void cleanup() {
         Utils.removeDirRecursively(tmpDirPath.toFile());
     }
@@ -130,6 +132,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("getFileCount() should return 0 when directory is empty")
     void getFileCountEmpty() throws IOException {
         String dirId = "1";
         Files.createDirectories(tmpDirPath.resolve(dirId));
@@ -164,6 +167,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("getSplitsForDir() should return correctly sized splits")
     void getSplitsForDir() throws IOException {
         String dirId = "1";
         int splits = 3;
@@ -188,6 +192,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("getSplitIterator() should return a correct split iterator")
     void getSplitIterator() throws IOException {
         String dirId = "1";
         long beg = 0;
@@ -212,6 +217,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("getSplitIterator() should return a correct dir iterator")
     void getDirIterator() throws IOException {
         String dirId = "1";
         File dir = new File("1");
@@ -234,6 +240,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("saveState() should correctly save a state file")
     void saveState() {
         String podId = "testPod";
         String state = "Sample state content";
@@ -250,6 +257,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("retrieveState() should correctly retrieve a state file")
     void retrieveState() {
         String podId = "testPod";
         String state = "Sample state content";
@@ -260,6 +268,7 @@ class DistrStorageTest {
     }
 
     @Test
+    @DisplayName("retrieveState() should correctly remove duplicate reduce output files")
     void removeReduceDuplicates() throws IOException {
         String dirId = "1";
         storage.createDir(dirId);
