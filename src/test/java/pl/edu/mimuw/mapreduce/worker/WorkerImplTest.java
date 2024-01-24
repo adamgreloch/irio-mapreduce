@@ -77,7 +77,7 @@ public class WorkerImplTest {
     }
 
     @Test
-    @DisplayName("WorkerImpl correctly does a task")
+    @DisplayName("Worker correctly processes a simple batch")
     public void workerImpl_correctlyDoesATask() throws Exception {
         loadBinaryFromResource("map", 0);
         loadBinaryFromResource("partition", 1);
