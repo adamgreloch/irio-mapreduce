@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mapreduce-master
+  labels:
+    app: mapreduce-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mapreduce-master
+  template:
+    metadata:
+      labels:
+        app: mapreduce-master
+    spec:
+      containers:
+        - name: mapreduce-master
+          image: us-central1-docker.pkg.dev/mapreduce-42/mapreduce/master:latest
+          imagePullPolicy: Always
+          env:
+          - name: TASKMGR_SERVICE_URI
+            value: "mapreduce-taskmanager-service:5044"
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          ports:
+          - containerPort: 5042
+          resources:
+            limits:
+              cpu: 50m
+              ephemeral-storage: 512Mi
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              ephemeral-storage: 512Mi
+              memory: 256Mi

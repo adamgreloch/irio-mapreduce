@@ -1,0 +1,14 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: fileserver-sm
+spec:
+  accessModes:
+  - ReadWriteOnce
+  storageClassName: filestore-tiny
+  resources:
+    requests:
+      storage: 25Gi
+    limits:
+      storage: 50Gi
+

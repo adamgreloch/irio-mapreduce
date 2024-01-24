@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapreduce-master-service
+spec:
+  clusterIP: None
+  selector:
+    app: mapreduce-master
+  ports:
+    - port: 5042
+      targetPort: 5042

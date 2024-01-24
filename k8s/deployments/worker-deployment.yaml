@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mapreduce-worker
+  labels:
+    app: mapreduce-worker
+spec:
+  replicas: 16
+  selector:
+    matchLabels:
+      app: mapreduce-worker
+  template:
+    metadata:
+      labels:
+        app: mapreduce-worker
+    spec:
+      volumes:
+      - name: mr-fs
+        persistentVolumeClaim:
+          claimName: mr-fs
+      containers:
+      - name: mapreduce-worker
+        image: us-central1-docker.pkg.dev/mapreduce-42/mapreduce/worker:latest
+        imagePullPolicy: Always
+        env:
+        - name: STORAGE_DIR
+          value: "/mnt/mr-fs"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        ports:
+        - containerPort: 5045
+        volumeMounts:
+        - name: mr-fs
+          mountPath: /mnt/mr-fs/
+        resources:
+          limits:
+            cpu: 500m
+            ephemeral-storage: 512Mi
+            memory: 512Mi
+          requests:
+            cpu: 500m
+            ephemeral-storage: 512Mi
+            memory: 512Mi

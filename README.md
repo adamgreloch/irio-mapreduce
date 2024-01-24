@@ -58,4 +58,8 @@ under `/build/generated/main/grpc/`
 
 ### Pushing Docker images to Artifact Registry
 
+Gradle target `dockerPushImages` builds docker images of all modules and pushes them to the
+specified artifact registry.
+
+Pushing to AR requires proper authentication:
 https://cloud.google.com/artifact-registry/docs/docker/authentication

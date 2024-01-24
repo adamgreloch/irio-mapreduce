@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mapreduce-worker-service
+spec:
+  clusterIP: None
+  selector:
+    app: mapreduce-worker
+  ports:
+    - port: 5045
+      targetPort: 5045

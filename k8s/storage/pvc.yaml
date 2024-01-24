@@ -1,0 +1,14 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: mr-fs
+spec:
+  accessModes:
+  - ReadWriteMany
+  storageClassName: filestore-sc
+  resources:
+    requests:
+      storage: 25Gi
+    limits:
+      storage: 50Gi
+
