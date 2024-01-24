@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 
@@ -10,6 +12,7 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public class ReduceProcessor extends TaskProcessor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ReduceProcessor.class);
     private final long fileId;
 
     public ReduceProcessor(Storage storage, long fileId, List<Long> binIds, String dataDir,
@@ -19,10 +22,9 @@ public class ReduceProcessor extends TaskProcessor {
     }
 
     public void reduce() throws ExecutionException, InterruptedException, IOException {
-        var fr = storage.getFile(dataDir, fileId);
-        var inputFile = copyInputFileToTempDir(fr);
-        var outputFile = Files.createFile(tempDir.resolve(fr.id() + "_2")).toFile();
-        var files = new File[]{inputFile, outputFile};
+        var inputFile = storage.getFile(dataDir, fileId);
+        var outputFile = Files.createFile(tempDir.resolve(inputFile.id() + "_2")).toFile();
+        var files = new File[]{inputFile.file(), outputFile};
 
         var pb = new ProcessBuilder();
         var i = 0;
@@ -33,15 +35,21 @@ public class ReduceProcessor extends TaskProcessor {
             var inputPath = files[i % 2].getAbsolutePath();
             String outputPath = files[1 - i % 2].getAbsolutePath();
 
+            LOGGER.info("Executing reduce binary " + binary + " on file " + inputPath);
+
             pb.command(binary,
                     "-i", inputPath,
                     "-o", outputPath);
 
             pb.start().waitFor();
 
+            LOGGER.info("Reduce binary execution finished on file: " + inputPath);
+
             i++;
         }
 
         storage.putReduceFile(String.valueOf(destDirId), fileId, ClusterConfig.POD_NAME, files[binIds.size() % 2]);
+
+        LOGGER.info("Reduce task finished for input file " + dataDir + "/" + fileId);
     }
 }

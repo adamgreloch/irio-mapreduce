@@ -3,7 +3,5 @@
   "partition_bin_id": 1,
   "reduce_bin_ids": [2],
   "input_id": "0",
-  "final_dest_dir_id": "1",
-  "split_count": 10,
-  "r_num": 2
+  "final_dest_dir_id": "1"
 }

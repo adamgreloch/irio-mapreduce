@@ -2,6 +2,7 @@ package pl.edu.mimuw.mapreduce.common;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.UUID;
 
 public class ClusterConfig {
@@ -14,10 +15,12 @@ public class ClusterConfig {
     public static final String POD_NAME = env_or("POD_NAME", UUID.randomUUID().toString());
 
     public static final String STORAGE_DIR;
+    public static final Path TEMP_DIR;
 
     static {
         try {
             STORAGE_DIR = env_or("STORAGE_DIR", Files.createTempDirectory("storage").toAbsolutePath().toString());
+            TEMP_DIR = Files.createDirectories(Path.of(STORAGE_DIR).resolve("tmp").resolve(POD_NAME));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
