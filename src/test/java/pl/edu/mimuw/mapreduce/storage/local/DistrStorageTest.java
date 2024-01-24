@@ -133,13 +133,20 @@ class DistrStorageTest {
 
     @Test
     @DisplayName("getFileCount() should return 0 when directory is empty")
-    void getFileCountEmpty() throws IOException {
+    void getFileCountEmpty() throws IOException, IllegalStateException {
         String dirId = "1";
         Files.createDirectories(tmpDirPath.resolve(dirId));
 
         long fileCount = storage.getFileCount(dirId);
         Utils.removeDirRecursively(tmpDirPath.resolve(dirId).toFile());
         assertEquals(0, fileCount);
+    }
+
+    @Test
+    @DisplayName("getFileCount() should return IllegalStateException when directory does not exist")
+    void getFileCountDirDoesNotExist() {
+        String dirId = "99";
+        assertThrows(IllegalStateException.class, () -> storage.getFileCount(dirId));
     }
 
     @Test
@@ -167,14 +174,55 @@ class DistrStorageTest {
     }
 
     @Test
-    @DisplayName("getSplitsForDir() should return correctly sized splits")
-    void getSplitsForDir() throws IOException {
+    @DisplayName("getSplitsForDir() should return an empty list when directory is empty")
+    void getSplitsForDirEmpty() throws IOException {
         String dirId = "1";
+        int splits = 0;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
+        File dir = new File("1");
+        dir.mkdir();
+
+        List<Split> splitList = storage.getSplitsForDir(dirId, splits);
+
+        assertEquals(0, splitList.size());
+        dir.delete();
+    }
+
+    @Test
+    @DisplayName("getSplitsForDir() should return correctly sized splits if dirId length % splits == 0")
+    void getSplitsForDir2() throws IOException {
+        String dirId = "2";
         int splits = 3;
 
         Files.createDirectories(tmpDirPath.resolve(dirId));
 
-        File dir = new File("1");
+        File dir = new File("2");
+        dir.mkdir();
+        File[] files = createFiles(9, Long.parseLong(dirId), storage.getStoragePath());
+
+        List<Split> splitList = storage.getSplitsForDir(dirId, splits);
+        assertEquals(splits, splitList.size());
+        assertEquals(0, splitList.get(0).getBeg());
+        assertEquals(2, splitList.get(0).getEnd());
+        assertEquals(3, splitList.get(1).getBeg());
+        assertEquals(5, splitList.get(1).getEnd());
+        assertEquals(6, splitList.get(2).getBeg());
+        assertEquals(8, splitList.get(2).getEnd());
+
+        deleteFiles(files);
+        dir.delete();
+    }
+
+    @Test
+    @DisplayName("getSplitsForDir() should return correctly sized splits even if dirId length % splits != 0")
+    void getSplitsForDir() throws IOException {
+        String dirId = "3";
+        int splits = 3;
+
+        Files.createDirectories(tmpDirPath.resolve(dirId));
+
+        File dir = new File("3");
         dir.mkdir();
         File[] files = createFiles(10, Long.parseLong(dirId), storage.getStoragePath());
 
@@ -302,6 +350,28 @@ class DistrStorageTest {
         assertFalse(Files.exists(filePath4));
         assertTrue(Files.exists(uniqueFile1));
         assertTrue(Files.exists(uniqueFile2));
+    }
+
+    @Test
+    @DisplayName("retrieveState() should not mutate a directory when all files are unique")
+    void removeReduceDuplicatesNoDuplicates() throws IOException {
+        String dirId = "1";
+        storage.createDir(dirId);
+
+        Path filePath1 = tmpDirPath.resolve(dirId).resolve("1_R_pod1");
+        Path filePath2 = tmpDirPath.resolve(dirId).resolve("2_R_pod1");
+        Path filePath3 = tmpDirPath.resolve(dirId).resolve("3_R_pod1");
+
+        Files.createDirectories(tmpDirPath);
+        Files.createFile(filePath1);
+        Files.createFile(filePath2);
+        Files.createFile(filePath3);
+
+        storage.removeReduceDuplicates(dirId);
+
+        assertTrue(Files.exists(filePath1));
+        assertTrue(Files.exists(filePath2));
+        assertTrue(Files.exists(filePath3));
     }
 }
 
