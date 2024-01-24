@@ -4,9 +4,13 @@ import java.io.File;
 
 public interface FileRep {
 
-    /** Method to access the file */
+    /**
+     * Method to access the file
+     */
     File file();
 
-    /** Gets file id */
+    /**
+     * Gets file id
+     */
     long id();
 }

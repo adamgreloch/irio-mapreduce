@@ -79,15 +79,15 @@ public class Utils {
     }
 
 
-    public static <S extends BindableService & HealthCheckable> Server start_server(S service, HealthStatusManager health, String target) throws IOException {
+    public static <S extends BindableService & HealthCheckable> Server start_server(S service, HealthStatusManager health, String target)
+            throws IOException {
         int port = Integer.parseInt(target.split(":")[1]);
-        Server server =
-                ServerBuilder.forPort(port)
-                        .addService(service)
-                        .addService(ProtoReflectionService.newInstance())
-                        .addService(health.getHealthService())
-                        .addService(ServerBreakerImpl.getInstance())
-                        .build();
+        Server server = ServerBuilder.forPort(port)
+                                     .addService(service)
+                                     .addService(ProtoReflectionService.newInstance())
+                                     .addService(health.getHealthService())
+                                     .addService(ServerBreakerImpl.getInstance())
+                                     .build();
 
         server.start();
 
@@ -118,11 +118,11 @@ public class Utils {
 
     public static ManagedChannelBuilder<?> createCustomClientChannelBuilder(String target) {
         return ManagedChannelBuilder.forTarget(target)
-                .defaultLoadBalancingPolicy("round_robin")
-                .defaultServiceConfig(generateHealthConfig(""))
-                .enableRetry()
-                .keepAliveTime(15*60, TimeUnit.SECONDS)
-                .usePlaintext();
+                                    .defaultLoadBalancingPolicy("round_robin")
+                                    .defaultServiceConfig(generateHealthConfig(""))
+                                    .enableRetry()
+                                    .keepAliveTime(15 * 60, TimeUnit.SECONDS)
+                                    .usePlaintext();
     }
 
     public static FutureCallback<PingResponse> createHealthCheckResponse(StreamObserver<PingResponse> responseObserver, MissingConnectionWithLayer connectingTo) {
@@ -136,9 +136,9 @@ public class Utils {
             @Override
             public void onFailure(Throwable t) {
                 PingResponse pingResponse = PingResponse.newBuilder()
-                        .setStatusCode(HealthStatusCode.Error)
-                        .setMissingLayer(connectingTo)
-                        .build();
+                                                        .setStatusCode(HealthStatusCode.Error)
+                                                        .setMissingLayer(connectingTo)
+                                                        .build();
                 responseObserver.onNext(pingResponse);
                 responseObserver.onCompleted();
             }
@@ -217,8 +217,12 @@ public class Utils {
     }
 
     public static DoMapRequest changeDestDirIdInTask(DoMapRequest request) {
-        return DoMapRequest.newBuilder().mergeFrom(request).setTask(
-                Task.newBuilder().mergeFrom(request.getTask()).setDestDirId(UUID.randomUUID().toString()).build()
-        ).build();
+        return DoMapRequest.newBuilder()
+                           .mergeFrom(request)
+                           .setTask(Task.newBuilder()
+                                        .mergeFrom(request.getTask())
+                                        .setDestDirId(UUID.randomUUID().toString())
+                                        .build())
+                           .build();
     }
 }

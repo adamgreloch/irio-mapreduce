@@ -96,8 +96,8 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             var split = request.getSplit();
             var task = request.getTask();
 
-            try (var processor = new MapProcessor(storage, pool, split, task.getTaskBinIdsList(),
-                    task.getInputDirId(), task.getDestDirId(), task.getRNum())) {
+            try (var processor = new MapProcessor(storage, pool, split, task.getTaskBinIdsList(), task.getInputDirId(),
+                    task.getDestDirId(), task.getRNum())) {
                 if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
                 LOGGER.info("Performing map+partition on split [" + split.getBeg() + ", " + split.getEnd() + "]");

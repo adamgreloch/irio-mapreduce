@@ -15,8 +15,8 @@ public class ReduceProcessor extends TaskProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(ReduceProcessor.class);
     private final long fileId;
 
-    public ReduceProcessor(Storage storage, long fileId, List<Long> binIds, String dataDir,
-                           String destDirId) throws IOException {
+    public ReduceProcessor(Storage storage, long fileId, List<Long> binIds, String dataDir, String destDirId)
+            throws IOException {
         super(storage, binIds, dataDir, destDirId);
         this.fileId = fileId;
     }
@@ -37,9 +37,7 @@ public class ReduceProcessor extends TaskProcessor {
 
             LOGGER.info("Executing reduce binary " + binary + " on file " + inputPath);
 
-            pb.command(binary,
-                    "-i", inputPath,
-                    "-o", outputPath);
+            pb.command(binary, "-i", inputPath, "-o", outputPath);
 
             pb.start().waitFor();
 

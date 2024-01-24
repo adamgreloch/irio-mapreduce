@@ -11,5 +11,5 @@ public interface HealthCheckable {
      *
      * @return true if service and all lower layers are considered healthy, false otherwise
      */
-   PingResponse internalHealthcheck();
+    PingResponse internalHealthcheck();
 }

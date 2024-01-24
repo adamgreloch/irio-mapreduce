@@ -51,10 +51,8 @@ public class WorkerImplTest {
                                                                    .build()
                                                                    .start());
 
-        blockingStub = WorkerGrpc.newBlockingStub(grpcCleanup.register(InProcessChannelBuilder.forName(workerName)
-                                                                                              .directExecutor()
-                                                                                              .useTransportSecurity()
-                                                                                              .build()));
+        blockingStub = WorkerGrpc.newBlockingStub(grpcCleanup.register(
+                InProcessChannelBuilder.forName(workerName).directExecutor().useTransportSecurity().build()));
 
     }
 
@@ -98,7 +96,7 @@ public class WorkerImplTest {
                        .setTaskType(Task.TaskType.Map)
                        .setInputDirId("0")
                        .setDestDirId("1")
-                        .setRNum(1)
+                       .setRNum(1)
                        .addAllTaskBinIds(taskBinIds)
                        .build();
 

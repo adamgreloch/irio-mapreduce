@@ -20,8 +20,7 @@ public final class Either<L, R> {
         right = r;
     }
 
-    public void apply(Consumer<? super L> lFunc, Consumer<? super R> rFunc)
-    {
+    public void apply(Consumer<? super L> lFunc, Consumer<? super R> rFunc) {
         left.ifPresent(lFunc);
         right.ifPresent(rFunc);
     }

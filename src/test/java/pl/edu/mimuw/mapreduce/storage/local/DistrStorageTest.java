@@ -64,8 +64,7 @@ class DistrStorageTest {
     @BeforeAll
     @DisplayName("Create temp dir and create storage instance")
     static void setupStorage() throws IOException {
-        tmpDirPath = Files.createTempDirectory("distr_storage_test")
-                              .toAbsolutePath();
+        tmpDirPath = Files.createTempDirectory("distr_storage_test").toAbsolutePath();
 
         storage = new DistrStorage(tmpDirPath.toString());
     }
@@ -102,7 +101,7 @@ class DistrStorageTest {
         String dirId = "1";
         long fileId = 1;
 
-        Files.createDirectories(tmpDirPath.resolve(dirId));;
+        Files.createDirectories(tmpDirPath.resolve(dirId));
 
         File tempFile = new File(tmpDirPath.resolve(dirId).resolve(String.valueOf(fileId)).toString());
         try {
@@ -233,7 +232,8 @@ class DistrStorageTest {
         assertEquals(3, splitList.get(1).getBeg());
         assertEquals(5, splitList.get(1).getEnd());
         assertEquals(6, splitList.get(2).getBeg());
-        assertEquals(9, splitList.get(2).getEnd()); // if dirId length % splits != 0, then the last split should be bigger
+        assertEquals(9,
+                splitList.get(2).getEnd()); // if dirId length % splits != 0, then the last split should be bigger
 
         deleteFiles(files);
         dir.delete();
@@ -248,7 +248,8 @@ class DistrStorageTest {
         Files.createDirectories(tmpDirPath.resolve(dirId));
         File dir = new File("1");
         dir.mkdir();
-        File[] files = createFiles(20, Long.parseLong(dirId), storage.getStoragePath()); // create more files than split iterator has
+        File[] files = createFiles(20, Long.parseLong(dirId),
+                storage.getStoragePath()); // create more files than split iterator has
         Split split = new SplitBuilder(beg, end).build();
 
         Iterator<Path> iterator = storage.getSplitIterator(String.valueOf(dirId), split);

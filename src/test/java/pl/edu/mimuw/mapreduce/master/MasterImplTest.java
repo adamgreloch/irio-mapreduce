@@ -41,8 +41,9 @@ public class MasterImplTest {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
         HealthStatusManager taskManagerHealth = new HealthStatusManager();
-        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
-                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+        var taskManagerServer = Utils.start_server(
+                new TaskManagerImpl(storage, taskManagerHealth, ClusterConfig.WORKERS_URI), taskManagerHealth,
+                ClusterConfig.TASK_MANAGERS_URI);
 
         HealthStatusManager workerHealth = new HealthStatusManager();
         var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,
@@ -53,12 +54,17 @@ public class MasterImplTest {
 
         HealthStatusManager masterHealth = new HealthStatusManager();
         // Create a server, add service, start, and register for automatic graceful shutdown.
-        var masterService =
-                grpcCleanup.register(InProcessServerBuilder.forName(masterName).directExecutor().addService(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI)).build().start());
+        var masterService = grpcCleanup.register(InProcessServerBuilder.forName(masterName)
+                                                                       .directExecutor()
+                                                                       .addService(new MasterImpl(masterHealth,
+                                                                               ClusterConfig.TASK_MANAGERS_URI))
+                                                                       .build()
+                                                                       .start());
 
         MasterGrpc.MasterBlockingStub blockingStub = MasterGrpc.newBlockingStub(
                 // Create a client channel and register for automatic graceful shutdown.
-                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
+                grpcCleanup.register(
+                        InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
 
         TimeUnit.SECONDS.sleep(1);
 
@@ -101,8 +107,9 @@ public class MasterImplTest {
         assertEquals(MissingConnectionWithLayer.TaskManager, response.getMissingLayer());
 
         HealthStatusManager taskManagerHealth = new HealthStatusManager();
-        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
-                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+        var taskManagerServer = Utils.start_server(
+                new TaskManagerImpl(storage, taskManagerHealth, ClusterConfig.WORKERS_URI), taskManagerHealth,
+                ClusterConfig.TASK_MANAGERS_URI);
 
         TimeUnit.SECONDS.sleep(5);
 
@@ -121,8 +128,9 @@ public class MasterImplTest {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
         HealthStatusManager taskManagerHealth = new HealthStatusManager();
-        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
-                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+        var taskManagerServer = Utils.start_server(
+                new TaskManagerImpl(storage, taskManagerHealth, ClusterConfig.WORKERS_URI), taskManagerHealth,
+                ClusterConfig.TASK_MANAGERS_URI);
 
         HealthStatusManager workerHealth = new HealthStatusManager();
         var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,
@@ -133,19 +141,23 @@ public class MasterImplTest {
 
         HealthStatusManager masterHealth = new HealthStatusManager();
         // Create a server, add service, start, and register for automatic graceful shutdown.
-        var masterService =
-                grpcCleanup.register(InProcessServerBuilder.forName(masterName).directExecutor()
-                        .addService(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI))
-                        .addService(ServerBreakerImpl.getInstance())
-                        .build().start());
+        var masterService = grpcCleanup.register(InProcessServerBuilder.forName(masterName)
+                                                                       .directExecutor()
+                                                                       .addService(new MasterImpl(masterHealth,
+                                                                               ClusterConfig.TASK_MANAGERS_URI))
+                                                                       .addService(ServerBreakerImpl.getInstance())
+                                                                       .build()
+                                                                       .start());
 
         MasterGrpc.MasterBlockingStub blockingStub = MasterGrpc.newBlockingStub(
                 // Create a client channel and register for automatic graceful shutdown.
-                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
+                grpcCleanup.register(
+                        InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
 
 
         ServerBreakerGrpc.ServerBreakerBlockingStub serverBreakerStub = ServerBreakerGrpc.newBlockingStub(
-                grpcCleanup.register(InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
+                grpcCleanup.register(
+                        InProcessChannelBuilder.forName(masterName).directExecutor().useTransportSecurity().build()));
 
         TimeUnit.SECONDS.sleep(1);
 
@@ -156,8 +168,7 @@ public class MasterImplTest {
 
 
         Response breakerResponse = serverBreakerStub.executePayload(
-                Payload.newBuilder().setAction(Action.FAIL_ALWAYS).build()
-        );
+                Payload.newBuilder().setAction(Action.FAIL_ALWAYS).build());
 
         response = blockingStub.healthCheck(Ping.newBuilder().build());
 
@@ -165,15 +176,11 @@ public class MasterImplTest {
         // Master should always fail
         assertEquals(HealthStatusCode.Error, response.getStatusCode());
 
-        Response masterResponse = blockingStub.submitBatch(
-                Batch.newBuilder().build()
-        );
+        Response masterResponse = blockingStub.submitBatch(Batch.newBuilder().build());
         assertEquals(StatusCode.Err, masterResponse.getStatusCode());
 
 
-        breakerResponse = serverBreakerStub.executePayload(
-                Payload.newBuilder().setAction(Action.NONE).build()
-        );
+        breakerResponse = serverBreakerStub.executePayload(Payload.newBuilder().setAction(Action.NONE).build());
 
         response = blockingStub.healthCheck(Ping.newBuilder().build());
 

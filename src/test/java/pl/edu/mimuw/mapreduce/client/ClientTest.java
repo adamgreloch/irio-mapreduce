@@ -5,25 +5,18 @@ import io.grpc.inprocess.InProcessChannelBuilder;
 import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
-import org.junit.Rule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import pl.edu.mimuw.mapreduce.ClientMain;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.mapreduce.master.MasterImpl;
-import pl.edu.mimuw.mapreduce.serverbreaker.ServerBreakerImpl;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.mapreduce.storage.local.DistrStorage;
 import pl.edu.mimuw.mapreduce.taskmanager.TaskManagerImpl;
 import pl.edu.mimuw.mapreduce.worker.WorkerImpl;
-import pl.edu.mimuw.proto.healthcheck.HealthStatusCode;
-import pl.edu.mimuw.proto.healthcheck.MissingConnectionWithLayer;
-import pl.edu.mimuw.proto.healthcheck.Ping;
-import pl.edu.mimuw.proto.healthcheck.PingResponse;
-import pl.edu.mimuw.proto.master.MasterGrpc;
-import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
@@ -31,7 +24,6 @@ import java.net.URISyntaxException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
@@ -52,15 +44,13 @@ public class ClientTest {
         HealthStatusManager health = new HealthStatusManager();
         String workerName = InProcessServerBuilder.generateName();
         workerService = grpcCleanup.register(InProcessServerBuilder.forName(workerName)
-                .directExecutor()
-                .addService(new WorkerImpl(storage, health))
-                .build()
-                .start());
+                                                                   .directExecutor()
+                                                                   .addService(new WorkerImpl(storage, health))
+                                                                   .build()
+                                                                   .start());
 
-        blockingStub = WorkerGrpc.newBlockingStub(grpcCleanup.register(InProcessChannelBuilder.forName(workerName)
-                .directExecutor()
-                .useTransportSecurity()
-                .build()));
+        blockingStub = WorkerGrpc.newBlockingStub(grpcCleanup.register(
+                InProcessChannelBuilder.forName(workerName).directExecutor().useTransportSecurity().build()));
 
     }
 
@@ -107,8 +97,9 @@ public class ClientTest {
                 masterHealth, ClusterConfig.MASTERS_URI);
 
         HealthStatusManager taskManagerHealth = new HealthStatusManager();
-        var taskManagerServer = Utils.start_server(new TaskManagerImpl(storage, taskManagerHealth,
-                ClusterConfig.WORKERS_URI), taskManagerHealth, ClusterConfig.TASK_MANAGERS_URI);
+        var taskManagerServer = Utils.start_server(
+                new TaskManagerImpl(storage, taskManagerHealth, ClusterConfig.WORKERS_URI), taskManagerHealth,
+                ClusterConfig.TASK_MANAGERS_URI);
 
         HealthStatusManager workerHealth = new HealthStatusManager();
         var workerServer = Utils.start_server(new WorkerImpl(storage, workerHealth), workerHealth,
@@ -139,7 +130,7 @@ public class ClientTest {
 
         var path = loadBatchJsonFromResource("client/batch-resource.json");
         if (path == null) throw new IOException("no json batch resource!");
-        Client.main(new String[]{path});
+        ClientMain.main(new String[]{path});
         Thread.sleep(2000);
 
         var output = readOutputFromFile(tempDirPath.resolve("1"), 0);

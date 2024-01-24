@@ -55,8 +55,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         HealthStatusManager health = new HealthStatusManager();
 
         Utils.start_server(new TaskManagerImpl(storage, health, ClusterConfig.WORKERS_URI), health,
-                        ClusterConfig.TASK_MANAGERS_URI)
-                .awaitTermination();
+                ClusterConfig.TASK_MANAGERS_URI).awaitTermination();
     }
 
     @Override
@@ -76,8 +75,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
         var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
         var listenableFuture = workerFutureStub.healthCheck(request);
-        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
-                MissingConnectionWithLayer.Worker), pool);
+        Futures.addCallback(listenableFuture,
+                Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.Worker), pool);
 
     }
 
@@ -143,25 +142,25 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
         private Task createMapTask() {
             return Task.newBuilder()
-                    .setTaskId(nextTaskId.getAndIncrement())
-                    .setTaskType(Task.TaskType.Map)
-                    .setInputDirId(batch.getInputId())
-                    .setDestDirId(UUID.randomUUID().toString())
-                    .setRNum(batch.getRNum())
-                    .addAllTaskBinIds(batch.getMapBinIdsList())
-                    .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
-                    .build();
+                       .setTaskId(nextTaskId.getAndIncrement())
+                       .setTaskType(Task.TaskType.Map)
+                       .setInputDirId(batch.getInputId())
+                       .setDestDirId(UUID.randomUUID().toString())
+                       .setRNum(batch.getRNum())
+                       .addAllTaskBinIds(batch.getMapBinIdsList())
+                       .addAllTaskBinIds(List.of((batch.getPartitionBinId())))
+                       .build();
         }
 
         private Task createReduceTask() {
             return Task.newBuilder()
-                    .setTaskId(nextTaskId.getAndIncrement())
-                    .setTaskType(Task.TaskType.Reduce)
-                    .setInputDirId(concatDirId)
-                    .setRNum(batch.getRNum())
-                    .setDestDirId(reduceDestDirId)
-                    .addAllTaskBinIds(batch.getReduceBinIdsList())
-                    .build();
+                       .setTaskId(nextTaskId.getAndIncrement())
+                       .setTaskType(Task.TaskType.Reduce)
+                       .setInputDirId(concatDirId)
+                       .setRNum(batch.getRNum())
+                       .setDestDirId(reduceDestDirId)
+                       .addAllTaskBinIds(batch.getReduceBinIdsList())
+                       .build();
         }
 
         private DoReduceRequest prepareDoReduceRequest(Integer fileId) {
@@ -177,9 +176,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             ListenableFuture<Response> listenableFuture = workerFutureStub.doReduce(doReduceRequest);
             runningReduces.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                    .add(listenableFuture);
-            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                    phaseDoneLatch, doReduceRequest, 0, runningReduces, completedReduces), pool);
+                          .add(listenableFuture);
+            Futures.addCallback(listenableFuture,
+                    createWorkerResponseCallback(responseObserver, phaseDoneLatch, doReduceRequest, 0, runningReduces,
+                            completedReduces), pool);
         }
 
         private DoMapRequest prepareDoMapRequest(Split split) {
@@ -193,9 +193,10 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
 
             ListenableFuture<Response> listenableFuture = workerFutureStub.doMap(doMapRequest);
             runningMaps.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                    .add(listenableFuture);
-            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                    phaseDoneLatch, doMapRequest, 0, runningMaps, completedMaps), pool);
+                       .add(listenableFuture);
+            Futures.addCallback(listenableFuture,
+                    createWorkerResponseCallback(responseObserver, phaseDoneLatch, doMapRequest, 0, runningMaps,
+                            completedMaps), pool);
         }
 
         private void mapPhase() throws InterruptedException {
@@ -271,9 +272,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             storage.moveUniqueReduceResultsToDestDir(reduceDestDirId, batch.getFinalDestDirId());
         }
 
-        private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests,
-                                           Map<Long, Boolean> completedRequests,
-                                           Map<Long, T> basicRequest) throws InterruptedException {
+        private <T> void rescheduleIfStale(Map<Long, List<ListenableFuture<Response>>> runningRequests, Map<Long, Boolean> completedRequests, Map<Long, T> basicRequest)
+                throws InterruptedException {
             var latchStatus = false;
             while (!latchStatus) {
                 latchStatus = phaseDoneLatch.await(WORKER_TIMEOUT, TimeUnit.SECONDS);
@@ -291,10 +291,7 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             }
         }
 
-        private <T> void resendRequest(Map<Long, List<ListenableFuture<Response>>> runningRequests,
-                                   Map<Long, Boolean> completedRequests,
-                                   Map<Long, T> basicRequest,
-                                   Long taskId) {
+        private <T> void resendRequest(Map<Long, List<ListenableFuture<Response>>> runningRequests, Map<Long, Boolean> completedRequests, Map<Long, T> basicRequest, Long taskId) {
             var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
 
             ListenableFuture<Response> listenableFuture;
@@ -303,34 +300,30 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
             if (request instanceof DoMapRequest doMapRequest) {
                 listenableFuture = workerFutureStub.doMap(Utils.changeDestDirIdInTask(doMapRequest));
                 runningRequests.computeIfAbsent(doMapRequest.getTask().getTaskId(), r -> new ArrayList<>())
-                        .add(listenableFuture);
+                               .add(listenableFuture);
             } else if (request instanceof DoReduceRequest doReduceRequest) {
                 listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                runningRequests.computeIfAbsent(doReduceRequest.getTask()
-                                .getTaskId(), r -> new ArrayList<>())
-                        .add(listenableFuture);
+                runningRequests.computeIfAbsent(doReduceRequest.getTask().getTaskId(), r -> new ArrayList<>())
+                               .add(listenableFuture);
             } else {
-                throw new AssertionError("Object is neither an instance of DoMapRequest or " +
-                        "DoReduceRequest");
+                throw new AssertionError("Object is neither an instance of DoMapRequest or " + "DoReduceRequest");
             }
 
-            Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                    phaseDoneLatch, request, 0, runningRequests, completedRequests), pool);
+            Futures.addCallback(listenableFuture,
+                    createWorkerResponseCallback(responseObserver, phaseDoneLatch, request, 0, runningRequests,
+                            completedRequests), pool);
 
         }
 
-        private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver,
-                                                                      CountDownLatch operationsDoneLatch,
-                                                                      Object request, int attempt, Map<Long,
-                List<ListenableFuture<Response>>> runningRequests, Map<Long, Boolean> completedRequests) {
+        private FutureCallback<Response> createWorkerResponseCallback(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch, Object request, int attempt, Map<Long, List<ListenableFuture<Response>>> runningRequests, Map<Long, Boolean> completedRequests) {
 
             return new FutureCallback<>() {
                 @Override
                 public void onSuccess(Response result) {
                     if (result.getStatusCode() == StatusCode.Err) {
-                        if (attempt >= MAX_ATTEMPT)
-                            Utils.respondWithThrowable(new RuntimeException("Number of attempts for task was " +
-                                    "exceeded"), responseObserver);
+                        if (attempt >= MAX_ATTEMPT) Utils.respondWithThrowable(
+                                new RuntimeException("Number of attempts for task was " + "exceeded"),
+                                responseObserver);
                         else reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                         return;
                     }
@@ -344,14 +337,15 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         }
                         if (request instanceof DoMapRequest doMapRequest) {
                             var split = doMapRequest.getSplit();
-                            LOGGER.info("Map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "] completed");
+                            LOGGER.info(
+                                    "Map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "] completed");
                             workersDestDirIds.add(doMapRequest.getTask().getDestDirId());
                         } else if (request instanceof DoReduceRequest doReduceRequest) {
                             LOGGER.info("Reduce task for file " + doReduceRequest.getFileId() + " completed");
                             workersDestDirIds.add(doReduceRequest.getTask().getDestDirId());
-                        } else{
-                            throw new AssertionError("Object is neither an instance of DoMapRequest or " +
-                                    "DoReduceRequest");
+                        } else {
+                            throw new AssertionError(
+                                    "Object is neither an instance of DoMapRequest or " + "DoReduceRequest");
                         }
                         operationsDoneLatch.countDown();
                     } // else: some other worker's response has already been sent for that request, ignore
@@ -360,34 +354,35 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                 /** Propagate error message. */
                 @Override
                 public void onFailure(Throwable t) {
-                    if (t.getClass() == CancellationException.class){
+                    if (t.getClass() == CancellationException.class) {
                         return;
                     }
 
-                    if (attempt >= MAX_ATTEMPT){
+                    if (attempt >= MAX_ATTEMPT) {
                         Utils.respondWithThrowable(t, responseObserver);
-                    }else{
+                    } else {
                         reRunTask(responseObserver, operationsDoneLatch, attempt + 1);
                     }
                 }
 
-                private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch,
-                                       int attempt) {
+                private void reRunTask(StreamObserver<Response> responseObserver, CountDownLatch operationsDoneLatch, int attempt) {
                     var workerFutureStub = WorkerGrpc.newFutureStub(workerChannel);
                     ListenableFuture<Response> listenableFuture;
 
                     if (request instanceof DoMapRequest doMapRequest) {
                         listenableFuture = workerFutureStub.doMap(doMapRequest);
                         var split = doMapRequest.getSplit();
-                        LOGGER.info("Rescheduling map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "]. Attempt " + attempt);
+                        LOGGER.info(
+                                "Rescheduling map+combine task for split [" + split.getBeg() + ", " + split.getEnd() + "]. Attempt " + attempt);
                     } else if (request instanceof DoReduceRequest doReduceRequest) {
-                        LOGGER.info("Rescheduling reduce task for file " + doReduceRequest.getFileId() + ". Attempt " + attempt);
+                        LOGGER.info(
+                                "Rescheduling reduce task for file " + doReduceRequest.getFileId() + ". Attempt " + attempt);
                         listenableFuture = workerFutureStub.doReduce(doReduceRequest);
-                    } else
-                        throw new AssertionError("Object is neither an instance of DoMapRequest or " +
-                                "DoReduceRequest");
-                    Futures.addCallback(listenableFuture, createWorkerResponseCallback(responseObserver,
-                            operationsDoneLatch, request, attempt + 1, runningRequests, completedRequests), pool);
+                    } else throw new AssertionError(
+                            "Object is neither an instance of DoMapRequest or " + "DoReduceRequest");
+                    Futures.addCallback(listenableFuture,
+                            createWorkerResponseCallback(responseObserver, operationsDoneLatch, request, attempt + 1,
+                                    runningRequests, completedRequests), pool);
                 }
 
                 private Long getTaskIdFromRequestObject(Object request) {
@@ -395,9 +390,8 @@ public class TaskManagerImpl extends TaskManagerGrpc.TaskManagerImplBase impleme
                         return doMapRequest.getTask().getTaskId();
                     } else if (request instanceof DoReduceRequest doReduceRequest) {
                         return doReduceRequest.getTask().getTaskId();
-                    } else
-                        throw new AssertionError("Object is neither an instance of DoMapRequest or " +
-                                "DoReduceRequest");
+                    } else throw new AssertionError(
+                            "Object is neither an instance of DoMapRequest or " + "DoReduceRequest");
                 }
             };
         }

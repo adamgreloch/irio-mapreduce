@@ -105,8 +105,8 @@ public class DistrStorage implements Storage {
     public void putFile(String dirId, long fileId, File file) {
         try {
             createDir(dirId);
-            Files.copy(file.toPath(), Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId))
-                                                                            .toString()));
+            Files.copy(file.toPath(),
+                    Paths.get((storagePath.resolve(dirId)).resolve(String.valueOf(fileId)).toString()));
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

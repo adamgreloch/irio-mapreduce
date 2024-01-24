@@ -37,8 +37,8 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
         HealthStatusManager health = new HealthStatusManager();
 
-        Utils.start_server(new MasterImpl(health, ClusterConfig.TASK_MANAGERS_URI), health,
-                ClusterConfig.MASTERS_URI).awaitTermination();
+        Utils.start_server(new MasterImpl(health, ClusterConfig.TASK_MANAGERS_URI), health, ClusterConfig.MASTERS_URI)
+             .awaitTermination();
     }
 
     private FutureCallback<Response> createCallback(StreamObserver<Response> responseObserver) {
@@ -68,7 +68,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
     public PingResponse internalHealthcheck() {
         // TODO this probably can be done better with a listener plugged to the healthCheck call, but
         //  for now it suffices
-        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+        if (Utils.handleServerBreakerInternalHealthCheckAction()) {
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
         }
         Utils.LOGGER.trace("Performing healthcheck...");
@@ -79,7 +79,10 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
             return listenableFuture.get();
         } catch (ExecutionException e) {
             Utils.LOGGER.warn("Lower layer unavailable: " + e.getMessage());
-            return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).setMissingLayer(MissingConnectionWithLayer.TaskManager).build();
+            return PingResponse.newBuilder()
+                               .setStatusCode(HealthStatusCode.Error)
+                               .setMissingLayer(MissingConnectionWithLayer.TaskManager)
+                               .build();
         } catch (Exception e) {
             Utils.LOGGER.error("Unhandled exception when health checking: " + e);
             return null;
@@ -88,7 +91,7 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+        if (Utils.handleServerBreakerHealthCheckAction(responseObserver)) {
             return;
         }
 
@@ -96,9 +99,8 @@ public class MasterImpl extends MasterGrpc.MasterImplBase implements HealthCheck
 
         var taskManagerFutureStub = TaskManagerGrpc.newFutureStub(taskManagerChannel);
 
-        ListenableFuture<PingResponse> listenableFuture =
-                taskManagerFutureStub.healthCheck(request);
-        Futures.addCallback(listenableFuture, Utils.createHealthCheckResponse(responseObserver,
-                MissingConnectionWithLayer.TaskManager), pool);
+        ListenableFuture<PingResponse> listenableFuture = taskManagerFutureStub.healthCheck(request);
+        Futures.addCallback(listenableFuture,
+                Utils.createHealthCheckResponse(responseObserver, MissingConnectionWithLayer.TaskManager), pool);
     }
 }
