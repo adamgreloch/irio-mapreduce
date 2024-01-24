@@ -36,7 +36,7 @@ message Task {
   uint32 r_num = 5; // number of files after partitioning
 
   // Binary IDs of map tasks and a partition binary at the end.
-  // OR one binary ID of reduce task
+  // OR binary IDs of reduce tasks
   repeated uint64 task_bin_ids = 6;
 }
 
@@ -62,5 +62,3 @@ message Response {
   StatusCode status_code = 1;
   string message = 2;
 }
-
-// TODO: add testing API (for breaking links, processes etc.)
