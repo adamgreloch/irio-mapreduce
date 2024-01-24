@@ -130,6 +130,9 @@ public class DistrStorage implements Storage {
     public List<Split> getSplitsForDir(String dirId, int splits) {
         List<Split> splitList = new ArrayList<>();
         long fileCount = getFileCount(dirId);
+        if (splits == 0) {
+            return Collections.emptyList();
+        }
         long splitSize = fileCount / splits;
         long current = 0;
         for (int i = 0; i < splits; i++) {
