@@ -27,6 +27,7 @@ import pl.edu.mimuw.proto.worker.WorkerGrpc;
 
 import java.io.*;
 import java.net.URISyntaxException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
@@ -74,9 +75,26 @@ public class ClientTest {
         storage.putFile(Storage.BINARY_DIR, binId, binary);
     }
 
-    String readOutputFromFile(Path dirPath, long fileId) throws FileNotFoundException {
-        var buf = new BufferedReader(new FileReader(dirPath.resolve(String.valueOf(fileId)).toString()));
-        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+    public static String readOutputFromFile(Path dirPath, long fileId) throws IOException {
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dirPath, fileId + "*")) {
+            // Iterate over files in the directory that start with fileId
+            for (Path filePath : stream) {
+                // Check if the file name starts with fileId
+                if (filePath.getFileName().toString().startsWith(String.valueOf(fileId))) {
+                    // Read the content of the file
+                    try (BufferedReader buf = new BufferedReader(new FileReader(filePath.toString()))) {
+                        return buf.lines().collect(Collectors.joining(System.lineSeparator()));
+                    }
+                }
+            }
+        }
+        throw new IOException("File not found for fileId: " + fileId);
+    }
+
+    String loadBatchJsonFromResource(String resourceName) throws IOException, URISyntaxException {
+        var path = getClass().getClassLoader().getResource(resourceName);
+        if (path == null) throw new IOException("no test batch json!");
+        return Path.of(path.toURI()).toString();
     }
 
     @Test
@@ -116,7 +134,17 @@ public class ClientTest {
 
         storage.createDir("1");
 
-        masterServer.awaitTermination();
+        var path = loadBatchJsonFromResource("client/batch-resource.json");
+        if (path == null) throw new IOException("no json batch resource!");
+        Client.main(new String[]{path});
+        Thread.sleep(2000);
+
+        var output = readOutputFromFile(tempDirPath.resolve("1"), 0);
+        assertEquals("""
+                a 2
+                b 2
+                c 2""", output);
+
         workerServer.shutdownNow().awaitTermination();
         taskManagerServer.shutdownNow().awaitTermination();
         masterServer.shutdownNow().awaitTermination();
