@@ -98,6 +98,7 @@ public class WorkerImplTest {
                        .setTaskType(Task.TaskType.Map)
                        .setInputDirId("0")
                        .setDestDirId("1")
+                        .setRNum(1)
                        .addAllTaskBinIds(taskBinIds)
                        .build();
 
@@ -135,7 +136,10 @@ public class WorkerImplTest {
         response = blockingStub.doReduce(doReduceRequest);
         System.out.println(response);
 
-        destDirDirPath = tempDirPath.resolve("2");
+        storage.createDir("3");
+        storage.moveUniqueReduceResultsToDestDir("2", "3");
+
+        destDirDirPath = tempDirPath.resolve("3");
         output = readOutputFromFile(destDirDirPath, 0);
 
         assertEquals("""
@@ -149,6 +153,7 @@ public class WorkerImplTest {
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();
+        storage.close();
     }
 
 }

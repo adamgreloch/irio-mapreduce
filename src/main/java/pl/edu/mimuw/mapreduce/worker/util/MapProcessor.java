@@ -1,5 +1,7 @@
 package pl.edu.mimuw.mapreduce.worker.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import pl.edu.mimuw.mapreduce.storage.FileRep;
 import pl.edu.mimuw.mapreduce.storage.Storage;
 import pl.edu.mimuw.proto.common.Split;
@@ -14,21 +16,26 @@ import java.util.List;
 import java.util.concurrent.*;
 
 public class MapProcessor extends TaskProcessor {
-    private final Split split;
-    private static final ExecutorService pool = Executors.newCachedThreadPool();
-    private final Semaphore mutex = new Semaphore(1);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MapProcessor.class);
 
-    public MapProcessor(Storage storage, Split split, List<Long> binIds, String dataDir,
-                        String destDirId) throws IOException {
+    private final Split split;
+    private final ExecutorService pool;
+    private final Semaphore mutex = new Semaphore(1);
+    private List<Future<Void>> futures = new ArrayList<>();
+    private final int rNum;
+
+    public MapProcessor(Storage storage, ExecutorService pool, Split split, List<Long> binIds, String dataDir,
+                        String destDirId, int rNum) throws IOException {
         super(storage, binIds, dataDir, destDirId);
         this.split = split;
+        this.rNum = rNum;
+        this.pool = pool;
     }
 
     public void map() throws ExecutionException, InterruptedException {
-        ArrayList<Future<Void>> futures = new ArrayList<>();
         for (Iterator<Path> it = storage.getSplitIterator(String.valueOf(dataDir), split); it.hasNext(); ) {
             Path path = it.next();
-            futures.add(pool.submit(new FileProcessor(storage.getFile(path), binaries.size())));
+            futures.add(pool.submit(new FileProcessor(storage.getFile(path), binIds.size())));
         }
         for (var future : futures)
             future.get();
@@ -57,26 +64,45 @@ public class MapProcessor extends TaskProcessor {
                 String outputPath;
                 if (i == binaryCount - 1) {
                     // Partition phase. The output path is just a destination directory
+                    LOGGER.info("Executing partition binary " + binary + " on file " + inputPath);
                     outputPath = storage.getDirPath(String.valueOf(destDirId)).toAbsolutePath().toString();
                     pb.command(binary,
-                            "-R", "1", // TODO
+                            "-R", String.valueOf(rNum),
                             "-i", inputPath,
                             "-o", outputPath);
                     mutex.acquire();
                     pb.inheritIO().start().waitFor();
                     mutex.release();
+                    LOGGER.info("Partition phase finished on file: " + inputPath);
+                    LOGGER.info("Partition results are on path: " + outputPath);
                 } else {
+                    LOGGER.info("Executing map binary " + binary + " on file " + inputPath);
                     outputPath = files[1 - i % 2].getAbsolutePath();
                     pb.command(binary,
                             "-i", inputPath,
                             "-o", outputPath);
                     pb.inheritIO().start().waitFor();
+                    LOGGER.info("Map binary execution finished on file: " + inputPath);
                 }
                 i++;
             }
 
-//            storage.putFile(String.valueOf(destDirId), fr.id(), files[(int) (1 - binaryCount % 2)]);
+            LOGGER.info("Map/Partition task finished for input file " + dataDir + "/" + fr.id());
+
             return null;
         }
+    }
+
+    @Override
+    public void close() throws IOException {
+        LOGGER.info("Waiting for threads to finish");
+        for (var future : futures) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        super.close();
     }
 }

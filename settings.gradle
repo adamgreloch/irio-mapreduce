@@ -9,6 +9,6 @@ pluginManagement {
 
 rootProject.name = 'mapreduce'
 include 'mains:worker'
-include 'mains:batchmanager'
 include 'mains:taskmanager'
 include 'mains:master'
+include 'mains:client'

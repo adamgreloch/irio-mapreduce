@@ -3,6 +3,8 @@
 #include <map>
 #include <sstream>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 void reduceFunction(const std::string& inputFilePath,
                     const std::string& outputFilePath) {

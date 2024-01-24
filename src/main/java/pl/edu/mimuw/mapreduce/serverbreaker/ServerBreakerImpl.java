@@ -9,7 +9,7 @@ import pl.edu.mimuw.proto.processbreaker.ServerBreakerGrpc;
 
 public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImplBase {
     private static volatile ServerBreakerImpl instance;
-    private Payload payload; // IDK, czy to volatile nie powinno być.
+    private Payload payload; // FIXME volatile?
 
     private ServerBreakerImpl() {
         this.payload = Payload.newBuilder().setAction(Action.NONE).build();
@@ -18,9 +18,10 @@ public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImpl
     @Override
     public void executePayload(Payload request, StreamObserver<Response> responseObserver) {
         this.payload = request;
-        Utils.respondWithSuccess(responseObserver);
+        Utils.respondWithResult(Utils.success(), responseObserver);
     }
-    public Payload getPayload(){
+
+    public Payload getPayload() {
         return payload;
     }
 
@@ -30,7 +31,7 @@ public final class ServerBreakerImpl extends ServerBreakerGrpc.ServerBreakerImpl
         if (result != null) {
             return result;
         }
-        synchronized(ServerBreakerImpl.class) {
+        synchronized (ServerBreakerImpl.class) {
             if (instance == null) {
                 instance = new ServerBreakerImpl();
             }

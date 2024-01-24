@@ -1,4 +1,4 @@
-package pl.edu.mimuw.mapreduce.client;
+package pl.edu.mimuw.mapreduce;
 
 import com.google.protobuf.util.JsonFormat;
 import io.grpc.Channel;
@@ -6,7 +6,6 @@ import io.grpc.ManagedChannel;
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
 import pl.edu.mimuw.proto.common.Batch;
 import pl.edu.mimuw.proto.common.Response;
@@ -18,15 +17,15 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-public class Client {
+public class ClientMain {
     public static final Logger LOGGER = LoggerFactory.getLogger(Utils.class);
     private final MasterGrpc.MasterBlockingStub blockingStub;
 
-    public Client(Channel channel) {
+    private ClientMain(Channel channel) {
         this.blockingStub = MasterGrpc.newBlockingStub(channel);
     }
 
-    public void sendBatch(Batch batch) {
+    private void sendBatch(Batch batch) {
         LOGGER.info("Will try to send batch.");
         Response response;
         try {
@@ -42,7 +41,7 @@ public class Client {
         }
     }
 
-    public static Optional<Batch> batchFromJson(String json) {
+    private static Optional<Batch> batchFromJson(String json) {
         var batchBuilder = Batch.newBuilder();
         try {
             JsonFormat.parser().ignoringUnknownFields().merge(json, batchBuilder);
@@ -63,7 +62,7 @@ public class Client {
         ManagedChannel channel = Utils.createCustomClientChannelBuilder(ClusterConfig.MASTERS_URI).build();
 
         try {
-            Client client = new Client(channel);
+            ClientMain client = new ClientMain(channel);
 
             File jsonFile = new File(jsonFilePath);
 

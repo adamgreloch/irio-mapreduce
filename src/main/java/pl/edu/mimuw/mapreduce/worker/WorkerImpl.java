@@ -1,6 +1,5 @@
 package pl.edu.mimuw.mapreduce.worker;
 
-import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
@@ -31,7 +30,8 @@ import static pl.edu.mimuw.proto.common.Task.TaskType.Reduce;
 public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheckable {
     public static final Logger LOGGER = LoggerFactory.getLogger(WorkerImpl.class);
     private final Storage storage;
-    private final ExecutorService pool;
+    // TODO when using fixedThreadPool there is a deadlock - investigate
+    private final ExecutorService pool = Executors.newCachedThreadPool();
     private final HealthStatusManager health;
 
     public static void start() throws IOException, InterruptedException {
@@ -45,20 +45,21 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
 
     public WorkerImpl(Storage storage, HealthStatusManager health) {
         this.storage = storage;
-        this.pool = Executors.newCachedThreadPool();
         this.health = health;
     }
 
     @Override
     public void doMap(DoMapRequest request, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
-        LOGGER.info("Worker start processing mapping: \n" + request.getTask());
+
+        var split = request.getSplit();
+        LOGGER.info("Received DoMapRequest on split [" + split.getBeg() + ", " + split.getEnd() + "]");
         pool.execute(new RequestHandler(Either.left(request), responseObserver));
     }
 
     @Override
     public void healthCheck(Ping request, StreamObserver<PingResponse> responseObserver) {
-        if(Utils.handleServerBreakerHealthCheckAction(responseObserver)){
+        if (Utils.handleServerBreakerHealthCheckAction(responseObserver)) {
             return;
         }
         LOGGER.trace("Received health check request");
@@ -68,13 +69,14 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
     @Override
     public void doReduce(DoReduceRequest request, StreamObserver<Response> responseObserver) {
         Utils.handleServerBreakerAction(responseObserver);
+        LOGGER.info("Received DoReduceRequest on fileId: " + request.getFileId());
         pool.execute(new RequestHandler(Either.right(request), responseObserver));
     }
 
     @Override
     public PingResponse internalHealthcheck() {
         // TODO perform filesystem access check
-        if (Utils.handleServerBreakerInternalHealthCheckAction()){
+        if (Utils.handleServerBreakerInternalHealthCheckAction()) {
             return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Error).build();
         }
         return PingResponse.newBuilder().setStatusCode(HealthStatusCode.Healthy).build();
@@ -84,7 +86,8 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
         private final Either<DoMapRequest, DoReduceRequest> eitherMapOrReduce;
         private final StreamObserver<Response> responseObserver;
 
-        RequestHandler(Either<DoMapRequest, DoReduceRequest> eitherMapOrReduce, StreamObserver<Response> responseObserver) {
+        RequestHandler(Either<DoMapRequest, DoReduceRequest> eitherMapOrReduce,
+                       StreamObserver<Response> responseObserver) {
             this.eitherMapOrReduce = eitherMapOrReduce;
             this.responseObserver = responseObserver;
         }
@@ -93,14 +96,14 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             var split = request.getSplit();
             var task = request.getTask();
 
-            try (var processor = new MapProcessor(storage, split, task.getTaskBinIdsList(),
-                    task.getInputDirId(), task.getDestDirId())) {
+            try (var processor = new MapProcessor(storage, pool, split, task.getTaskBinIdsList(),
+                    task.getInputDirId(), task.getDestDirId(), task.getRNum())) {
                 if (task.getTaskType() != Map) throw new RuntimeException("Bad task type");
 
-                LOGGER.trace("Performing map");
+                LOGGER.info("Performing map+partition on split [" + split.getBeg() + ", " + split.getEnd() + "]");
                 processor.map();
 
-                Utils.respondWithSuccess(responseObserver);
+                Utils.respondWithResult(Utils.success(), responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             }
@@ -110,23 +113,21 @@ public class WorkerImpl extends WorkerGrpc.WorkerImplBase implements HealthCheck
             var file = request.getFileId();
             var task = request.getTask();
 
-            try (var processor = new ReduceProcessor(storage, file, task.getTaskBinIdsList(),
-                    task.getInputDirId(), task.getDestDirId())) {
+            try (var processor = new ReduceProcessor(storage, file, task.getTaskBinIdsList(), task.getInputDirId(),
+                    task.getDestDirId())) {
                 if (task.getTaskType() != Reduce) throw new RuntimeException("Bad task type");
 
-                LOGGER.trace("Performing reduce");
+                LOGGER.info("Performing reduce");
                 processor.reduce();
 
-                Utils.respondWithSuccess(responseObserver);
+                Utils.respondWithResult(Utils.success(), responseObserver);
             } catch (Exception e) {
                 Utils.respondWithThrowable(e, responseObserver);
             }
         }
 
         public void run() {
-            health.setStatus("", HealthCheckResponse.ServingStatus.NOT_SERVING);
             eitherMapOrReduce.apply(this::processMap, this::processReduce);
-            health.setStatus("", HealthCheckResponse.ServingStatus.SERVING);
         }
     }
 }
