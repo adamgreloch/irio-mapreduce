@@ -38,6 +38,7 @@ public class WorkerImplTest {
     public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @BeforeAll
+    @DisplayName("Create temp dir and start worker server")
     public static void createTempDir() throws Exception {
         tempDirPath = Files.createTempDirectory("worker_test");
         storage = new DistrStorage(tempDirPath.toAbsolutePath().toString());
@@ -148,6 +149,7 @@ public class WorkerImplTest {
     }
 
     @AfterAll
+    @DisplayName("Delete temp dir and terminate worker server")
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
         workerService.shutdownNow().awaitTermination();

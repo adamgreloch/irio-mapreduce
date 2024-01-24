@@ -8,6 +8,7 @@ import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Rule;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
@@ -43,6 +44,7 @@ public class ClientTest {
     public static final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @BeforeAll
+    @DisplayName("Create temp dir and start worker server")
     public static void createTempDir() throws Exception {
         tempDirPath = Files.createTempDirectory("worker_test");
         storage = new DistrStorage(tempDirPath.toAbsolutePath().toString());
@@ -98,6 +100,7 @@ public class ClientTest {
     }
 
     @Test
+    @DisplayName("Test of the whole system - all layers working correctly")
     public void client_wholeSystemWorkingTest() throws Exception {
         HealthStatusManager masterHealth = new HealthStatusManager();
         var masterServer = Utils.start_server(new MasterImpl(masterHealth, ClusterConfig.TASK_MANAGERS_URI),
@@ -151,6 +154,7 @@ public class ClientTest {
     }
 
     @AfterAll
+    @DisplayName("Delete temp dir")
     public static void cleanup() throws Exception {
         Utils.removeDirRecursively(tempDirPath.toFile());
     }

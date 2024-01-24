@@ -5,6 +5,7 @@ import io.grpc.inprocess.InProcessServerBuilder;
 import io.grpc.protobuf.services.HealthStatusManager;
 import io.grpc.testing.GrpcCleanupRule;
 import org.junit.Rule;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import pl.edu.mimuw.mapreduce.Utils;
 import pl.edu.mimuw.mapreduce.common.ClusterConfig;
@@ -35,6 +36,7 @@ public class MasterImplTest {
     public final GrpcCleanupRule grpcCleanup = new GrpcCleanupRule();
 
     @Test
+    @DisplayName("MasterImpl correctly health checks lower layers")
     public void masterImpl_correctlyHealthChecksLowerLayers() throws Exception {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
@@ -85,6 +87,7 @@ public class MasterImplTest {
     }
 
     @Test
+    @DisplayName("MasterImpl correctly learns about missing worker layer")
     public void masterImpl_rediscoversPreviouslyInaccessibleService() throws Exception {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
@@ -113,6 +116,7 @@ public class MasterImplTest {
     }
 
     @Test
+    @DisplayName("MasterImpl correctly responds to ServerBreaker")
     public void masterImpl_alwaysFailFlagIsSet() throws Exception {
         Storage storage = new DistrStorage(ClusterConfig.STORAGE_DIR);
 
